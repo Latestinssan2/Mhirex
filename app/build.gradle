@@ -5,14 +5,6 @@ plugins {
 
 apply plugin: 'com.mikepenz.aboutlibraries.plugin'
 
-def localConfig = new Properties()
-def localConfigFile = rootProject.file('local.properties')
-if (localConfigFile.exists()) {
-    localConfigFile.withInputStream { localConfig.load(it) }
-}
-def pixabayKey = (localConfig.getProperty('pixabayApiKey', '') ?: '')
-        .replace('\\', '\\\\').replace('"', '\\"')
-
 // Google Services / Firebase.
 //
 // Requires app/google-services.json to exist, which is gitignored and therefore absent from a clean
@@ -45,14 +37,12 @@ android {
         targetSdk 34
         // Per-ABI version codes are base + 0/1/2 (armeabi-v7a/arm64-v8a/x86_64), so the base has to
         // advance by MORE than the largest offset for every ABI to be offered the upgrade.
-        // v1.0-beta9 shipped base 11, i.e. per-ABI 11/12/13. Bumping the base by 1 would have left
-        // armeabi-v7a installs (which are on 11) with nothing higher than what they already have,
-        // and Android silently refuses such an "upgrade". Base 14 gives 14/15/16, clear of all three.
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 15
-        versionName "1.0-beta11"
+        // v1.0-beta11 shipped base 15, i.e. per-ABI 15/16/17. Base 16 gives 16/17/18 so Android
+        // accepts this as an upgrade for every ABI variant.
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 16
+        versionName "1.0-beta12"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField "String", "PIXABAY_API_KEY", "\"${pixabayKey}\""
         vectorDrawables {
             useSupportLibrary true
         }

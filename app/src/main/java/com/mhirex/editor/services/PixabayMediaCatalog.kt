@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.security.MessageDigest
 
@@ -23,7 +22,7 @@ object PixabayMediaCatalog {
     private const val CACHE_NAME = "pixabay_search_cache"
     private const val CACHE_TTL_MS = 24L * 60L * 60L * 1000L
 
-    suspend fun search(context: Context, apiKey: String, query: String, mediaType: String): List<PixabayMediaHit> = withContext(Dispatchers.IO) {
+    suspend fun search(context: Context, query: String, mediaType: String): List<PixabayMediaHit> = withContext(Dispatchers.IO) {
         require(mediaType == "images" || mediaType == "videos")
         val normalizedQuery = query.trim().take(100)
         require(normalizedQuery.isNotBlank())
@@ -36,9 +35,7 @@ object PixabayMediaCatalog {
             cachedJson
         } else {
             val encodedQuery = URLEncoder.encode(normalizedQuery, Charsets.UTF_8.name())
-            val endpoint = if (mediaType == "videos") "https://pixabay.com/api/videos/" else "https://pixabay.com/api/"
-            val extra = if (mediaType == "videos") "" else "&image_type=all&orientation=all"
-            val url = URL("$endpoint?key=${URLEncoder.encode(apiKey, Charsets.UTF_8.name())}&q=$encodedQuery&per_page=20&safesearch=true$extra")
+            val url = java.net.URL("https://mhirex.vercel.app/api/pixabay?type=$mediaType&q=$encodedQuery")
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 12_000
@@ -51,7 +48,8 @@ object PixabayMediaCatalog {
                 val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 if (status !in 200..299) {
                     Log.w("PixabayMediaCatalog", "Pixabay HTTP $status: ${response.take(200)}")
-                    throw IllegalStateException("Pixabay returned HTTP $status")
+                    val message = runCatching { JSONObject(response).optString("error") }.getOrNull()
+                    throw IllegalStateException(message?.takeIf { it.isNotBlank() } ?: "Pixabay search returned HTTP $status")
                 }
                 prefs.edit().putString("$cacheKey:data", response).putLong("$cacheKey:time", now).apply()
                 response

@@ -138,14 +138,15 @@ are documented in [`PLAN.md`](PLAN.md); the work queue is tracked in [`TODO.md`]
 
 ### Pixabay API setup
 
-For local builds, add `pixabayApiKey=<your key>` to the ignored root `local.properties` file.
-The key is compiled into the app binary and can be extracted; use a restricted key and rotate it
-before sharing a build. Search terms are sent to Pixabay and responses are cached for 24 hours.
-Pixabay's API does not offer audio search, so Music and Sound Effects open Pixabay's library page.
+Pixabay search runs through `website/api/pixabay.js`. Set `PIXABAY_API_KEY` as a **sensitive
+Production environment variable** on the Mhirex Vercel project. The Android app calls the Mhirex
+endpoint, so the key is not compiled into the APK or exposed in the landing page. Search terms are
+sent to Pixabay and responses are cached for 24 hours. Pixabay's API does not offer audio search,
+so Music and Sound Effects open Pixabay's library page.
 
 Face-effect frames are analyzed on-device. MediaPipe may send SDK performance and usage metrics;
-the selected video frames are not uploaded. YouTube and Spotify links open their official services;
-Mhirex does not download or extract their audio.
+the selected video frames are not uploaded. Spotify links open the official service; Mhirex does not
+download audio from streaming links. Import media files you own or are authorized to use.
 
 ## 📱 Screenshots
 

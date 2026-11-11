@@ -7,8 +7,8 @@ not treated as freely licensed merely because it is present in the repository.
 | Asset | Use | Provenance / licence status |
 |---|---|---|
 | `logo.png` | Android launcher icon source, and the source for the Play listing below | Supplied for the Mhirex rebrand by the project owner. Confirm the owner's distribution terms before release. |
-| `app/src/main/res/mipmap-nodpi/logo.png` | Android launcher icon (still the shipped home-screen icon) | Exact copy of the supplied `logo.png`; no third-party artwork added. |
-| `app/src/main/res/drawable-nodpi/brand_logo.png` | About card, startup welcome, and sign-in dialog | Current Mhirex mark, supplied by the project owner as a 1254 px RGBA and cropped to its alpha bounds at 512x511. Replaces `logo.png` in the in-app UI; the launcher icon above was deliberately left on the older mark. |
+| `app/src/main/res/mipmap-nodpi/logo.png` | Android launcher icon | Exact copy of `src/images/logo_readme_dark.png`, with the supplied white mark on a solid black background. |
+| `app/src/main/res/drawable-nodpi/brand_logo.png` | About card, startup welcome, and sign-in dialog | Current Mhirex mark, supplied by the project owner as a 1254 px RGBA and cropped to its alpha bounds at 512x511. The dark tile launcher icon uses `logo_readme_dark.png`; in-app halo treatments continue to use this transparent mark. |
 | `src/images/logo_readme_light.png`, `src/images/logo_readme_dark.png` | README wordmark | Derived from the mark above by this project: alpha-bbox cropped, scaled to 62.5% of a 512 px canvas. The light variant adds a `#111114` rounded tile (from `values/colors.xml` `colorSurface`) because the mark is white on transparent and would be invisible on GitHub's white page. No third-party artwork added. |
 | `app/src/main/ic_launcher-playstore.png` | Play Store icon | Resized derivative of `logo.png`; no additional artwork. |
 | `fastlane/metadata/android/en-US/images/icon.png` | Play Store icon | 512 px resized derivative of `logo.png`; no additional artwork. |

@@ -293,6 +293,7 @@ class VideoEditingActivity : AppCompatActivity() {
                         showProErrorDialog(ErrorCode.FFMPEG_EXECUTION_FAILED, "Export completed without a saved URI")
                     } else {
                         viewModel.finishExport()
+                        runCatching { shareExport(Uri.parse(uri), viewModel.exportAudioOnly.value) }
                         android.widget.Toast.makeText(this@VideoEditingActivity, R.string.toast_video_exported_to_gallery_succ, android.widget.Toast.LENGTH_LONG).show()
                     }
                     requestId?.let(::clearExportRequest)
@@ -2097,6 +2098,9 @@ class VideoEditingActivity : AppCompatActivity() {
         try {
             btnUndo = findViewById(R.id.btnUndo)
             btnRedo = findViewById(R.id.btnRedo)
+            findViewById<ImageButton>(R.id.btnCreatorTools)?.setBounceClickListener {
+                showCreatorToolsDialog()
+            }
             btnPreview = findViewById(R.id.btnPreview)
             btnUndo.setBounceClickListener {
                 if (isShowingPreview) dismissPreview()
@@ -5260,10 +5264,10 @@ class VideoEditingActivity : AppCompatActivity() {
             try {
                 if (!isActive || activeExportRequestId != requestId) return@launch
                 viewModel.startExport()
+                val isAudioOnly = viewModel.exportAudioOnly.value
 
                 val result = withContext(kotlinx.coroutines.Dispatchers.IO) {
                     val sharedPreferences = getSharedPreferences(Branding.PREFS_NAME, Context.MODE_PRIVATE)
-                    val isAudioOnly = viewModel.exportAudioOnly.value
                     val prefKey = if (isAudioOnly) "export_audio_directory_uri" else "export_directory_uri"
                     val customUriString = sharedPreferences.getString(prefKey, null)?.let(Uri::parse)
                     val customTreeUri = customUriString?.takeIf { it.scheme == "content" }
@@ -5326,6 +5330,7 @@ class VideoEditingActivity : AppCompatActivity() {
                             viewModel.updateExportProgress(100)
                             viewModel.finishExport()
                             clearExportRequest(requestId)
+                            runCatching { shareExport(result.uri, isAudioOnly) }
                             // The destination is already shown in the export-folder row, so reuse
                             // the existing translated success string rather than adding a new one.
                             Toast.makeText(
@@ -7397,8 +7402,8 @@ class VideoEditingActivity : AppCompatActivity() {
         view.findViewById<View>(R.id.btnSongLinkInfo).setBounceClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle("Use music you have rights to")
-                .setMessage("Paste a Spotify or YouTube link to open it in its official app, then import a licensed audio file with Add Audio. Mhirex cannot extract or download MP3s from those services, and a link cannot prove or grant video-use rights. A credit line does not replace a licence.")
-                .setPositiveButton("Open song link") { _, _ -> showSongLinkDialog() }
+                .setMessage("Open a Spotify track in its official app, then import a licensed audio file with Add Audio. Mhirex cannot download audio from streaming links, and a link cannot prove or grant video-use rights.")
+                .setPositiveButton("Open Spotify") { _, _ -> showSpotifyLinkDialog() }
                 .setNeutralButton("Add licensed audio") { _, _ -> audioAction() }
                 .setNegativeButton("Cancel", null)
                 .show()
@@ -7656,6 +7661,40 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
+    private fun showCreatorToolsDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Creator tools")
+            .setItems(arrayOf(
+                "Explore Pixabay library",
+                "Quick edit templates",
+                "Instagram / YouTube watermark",
+                "Import video from this device",
+                "Import licensed audio file",
+                "Open a Spotify link"
+            )) { _, which ->
+                when (which) {
+                    0 -> showPixabayExploreDialog()
+                    1 -> showEditTemplatesDialog()
+                    2 -> showCreatorWatermarkDialog()
+                    3 -> openFilePickerMerge()
+                    4 -> audioAction()
+                    5 -> showSpotifyLinkDialog()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun shareExport(uri: Uri, isAudioOnly: Boolean) {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = if (isAudioOnly) "audio/*" else "video/mp4"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = android.content.ClipData.newUri(contentResolver, "Mhirex export", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(shareIntent, if (isAudioOnly) "Share audio" else "Share video"))
+    }
+
     private fun showPixabayExploreDialog() {
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 4) }
         val query = TextInputEditText(this).apply {
@@ -7704,15 +7743,10 @@ class VideoEditingActivity : AppCompatActivity() {
     }
 
     private fun searchPixabay(query: String, mediaType: String) {
-        val apiKey = BuildConfig.PIXABAY_API_KEY
-        if (apiKey.isBlank()) {
-            Toast.makeText(this, "Pixabay API key is not configured. Add pixabayApiKey to local.properties.", Toast.LENGTH_LONG).show()
-            return
-        }
         showLoading("Searching Pixabay…")
         lifecycleScope.launch {
             try {
-                val hits = PixabayMediaCatalog.search(this@VideoEditingActivity, apiKey, query, mediaType)
+                val hits = PixabayMediaCatalog.search(this@VideoEditingActivity, query, mediaType)
                 if (hits.isEmpty()) {
                     Toast.makeText(this@VideoEditingActivity, "No Pixabay results found.", Toast.LENGTH_SHORT).show()
                 } else {
@@ -7844,23 +7878,23 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSongLinkDialog() {
+    private fun showSpotifyLinkDialog() {
         val input = TextInputEditText(this).apply {
-            hint = "https://open.spotify.com/... or https://youtu.be/..."
+            hint = "https://open.spotify.com/..."
             setSingleLine(true)
         }
         MaterialAlertDialogBuilder(this)
-            .setTitle("Open a song link")
-            .setMessage("The link opens in the official service. Import a separate audio file only if you have permission to use it in your video.")
+            .setTitle("Open a Spotify track")
+            .setMessage("This opens Spotify. Import a separate audio file only if you have permission to use it in your video.")
             .setView(input)
             .setPositiveButton("Open") { _, _ ->
                 val uri = runCatching { Uri.parse(input.text?.toString()?.trim().orEmpty()) }.getOrNull()
                 val host = uri?.host?.lowercase(Locale.ROOT).orEmpty()
-                if (uri == null || uri.scheme != "https" || !(host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtu.be" || host == "spotify.com" || host.endsWith(".spotify.com"))) {
-                    Toast.makeText(this, "Enter a valid YouTube or Spotify link.", Toast.LENGTH_SHORT).show()
+                if (uri == null || uri.scheme != "https" || !(host == "spotify.com" || host.endsWith(".spotify.com"))) {
+                    Toast.makeText(this, "Enter a valid Spotify link.", Toast.LENGTH_SHORT).show()
                 } else {
                     runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-                        .onFailure { Toast.makeText(this, "Could not open the song link.", Toast.LENGTH_SHORT).show() }
+                        .onFailure { Toast.makeText(this, "Could not open Spotify.", Toast.LENGTH_SHORT).show() }
                 }
             }
             .setNegativeButton("Cancel", null)

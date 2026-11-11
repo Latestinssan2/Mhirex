@@ -70,7 +70,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="start|center_vertical"
-        android:text="♫  Spotify / YouTube song link"
+        android:text="♫  Spotify song link"
         android:textAllCaps="false" />
 
     <com.google.android.material.button.MaterialButton

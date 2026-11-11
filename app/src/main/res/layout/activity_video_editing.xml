@@ -74,6 +74,18 @@
                 app:tint="@color/textColor" />
 
             <ImageButton
+                android:id="@+id/btnCreatorTools"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@drawable/ic_public_24"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:contentDescription="Pixabay, templates, and watermarks"
+                android:layout_marginEnd="8dp"
+                app:tint="@color/textColor" />
+
+            <ImageButton
                 android:id="@+id/btnPreview"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
