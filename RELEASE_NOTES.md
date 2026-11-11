@@ -1,3 +1,17 @@
+# Mhirex 1.0-beta15
+
+## What's new
+
+- Fix the Happy Birthday frame alignment and place its title, frame and music on separate named, editable timeline tracks.
+- Update Freeze + Death with the supplied white skull, a shake animation, and editable freeze, impact and rattle sound tracks.
+- Show descriptive names for template image and sound tracks so users can find and adjust each layer.
+
+## Build
+
+- Android version: `1.0-beta15` (version code `19`).
+
+---
+
 # Mhirex 1.0-beta14
 
 ## What's new

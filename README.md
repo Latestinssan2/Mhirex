@@ -108,9 +108,9 @@ Everything in this list ships today.
 - **Canvas Background** - Add a blurred background or a solid color for a cohesive look when your video aspect ratio does not match the project frame.
 - **Reverse** - Reverse video playback.
 - **Timeline Organization** - Enhanced editing with snapping functionality, overlay duplication, freeze frame actions, and improved UI visual styling.
-- **Editable templates** - Freeze + monochrome, Noir montage with automatic varied transitions, a birthday title with a locally synthesized melody, and a split-at-playhead slow-motion preset.
+- **Editable templates** - Freeze + Death with a shake, impact sounds, and a skull overlay; Happy Birthday with editable title, frame, music, and chime tracks; Noir montage with automatic varied transitions; and a split-at-playhead slow-motion preset.
 - **Tracked face effects** - On-device face-landmark tracking can attach the bundled goggles or skull mask artwork to one face in a selected video clip.
-- **Pixabay Explore** - Search Pixabay images and videos, see creator names, then review rights before adding a video. Music and sound-effect search opens Pixabay's own library.
+- **Pixabay Explore** - Search Pixabay images and videos, see creator names, and add images or videos to the timeline. Music and sound effects open Pixabay inside the app; tapping its official Free Download action downloads and adds the audio to the timeline.
 - **Motion scrub and haptics** - Optional gyroscope-driven timeline scrubbing, with native haptic ticks controlled by the app's haptics setting.
 - **Project Save & Import** - Save non-destructive project state as a `.lcprj` file to save and reopen editable project files anytime.
 - **Freehand Drawing** - Draw directly on top of video clips with custom brush color and stroke controls.
@@ -142,7 +142,8 @@ Pixabay search runs through `website/api/pixabay.js`. Set `PIXABAY_API_KEY` as a
 Production environment variable** on the Mhirex Vercel project. The Android app calls the Mhirex
 endpoint, so the key is not compiled into the APK or exposed in the landing page. Search terms are
 sent to Pixabay and responses are cached for 24 hours. Pixabay's API does not offer audio search,
-so Music and Sound Effects open Pixabay's library page.
+so Music and Sound Effects use Pixabay's official library in an in-app browser and import the
+user-selected download directly into the project.
 
 Face-effect frames are analyzed on-device. MediaPipe may send SDK performance and usage metrics;
 the selected video frames are not uploaded. Spotify links open the official service; Mhirex does not

@@ -25,7 +25,9 @@ not treated as freely licensed merely because it is present in the repository.
 | `app/src/main/res/drawable-nodpi/ar_goggles.png`, `ar_skull_mask.png` | Face-tracked editor accessories | Original Mhirex artwork generated for this project; no third-party image assets. |
 | `app/src/main/res/drawable-nodpi/brand_youtube.png`, `brand_instagram.png` | Optional creator watermark badges | Original simplified project-made badge artwork for user-selected creator handles; not copied from the external image URLs in the feature request. |
 | `app/src/main/res/raw/freeze_stinger.wav` | Freeze template sound cue | Original sound synthesized for Mhirex from generated oscillator/noise samples. |
+| `app/src/main/res/drawable-nodpi/death_skull.png` | Freeze + Death template skull overlay | Supplied by the project owner from the linked PNGEgg thumbnail; checkerboard preview pixels were removed to create transparency. The source page does not establish redistribution rights; verify before a stable release. |
 | `app/src/main/res/raw/birthday_chime.wav` | Birthday template sound effect | Original chime synthesized for Mhirex from generated oscillator samples. |
+| `app/src/main/res/raw/freeze_impact.wav`, `shake_rattle.wav` | Freeze + Death template sound effects | Original Mhirex effects synthesized from oscillator, transient-noise, and rattle samples. |
 | `app/src/main/res/raw/happy_birthday_melody.wav` | Birthday template music | New synthesized recording made for Mhirex. The underlying familiar birthday composition may have different rights by territory; the template adds a reminder to confirm local rights before sharing. |
 | `app/src/main/assets/face_landmarker.task` | On-device face landmark tracking for AR accessories | Official MediaPipe Face Landmarker model, downloaded from Google AI Edge's model storage. SHA-256 `64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`. Model cards identify Apache License 2.0; the MediaPipe SDK is pinned in Gradle and its generated AboutLibraries notices remain part of release review. |
 | `app/src/androidTest/assets/mhirex_test_fixture.mp4` | Instrumentation-only test media | Synthetic local fixture; test-only and not included in the production APK. |
@@ -34,8 +36,8 @@ not treated as freely licensed merely because it is present in the repository.
 | `com.antonkarpenko:ffmpeg-kit-full-gpl:2.1.0` | Native media processing dependency | GPL-3.0. It is a dependency rather than a repository asset; its source, licence, and corresponding-source obligations must accompany distributed binaries. |
 
 Pixabay search is user initiated. The app caches API responses for 24 hours,
-shows creator names, and opens the source page for licence review and download;
-Pixabay's API does not expose audio search, so the app opens Pixabay Music and
-Sound Effects for those searches. Users should import downloaded files through
-the existing media tools and retain any licence records required for their use.
+shows creator names, and opens source pages for review. Pixabay's API does not
+expose audio search, so Music and Sound Effects use the official Pixabay pages
+inside the app; the app imports audio when the user taps Pixabay's Free Download
+action. Users should retain any licence records required for their use.
 Any future asset addition must be added to this table before release.

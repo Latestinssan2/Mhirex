@@ -6839,7 +6839,13 @@ class VideoEditingActivity : AppCompatActivity() {
                 } else if (op is EditOperation.AddImageOverlay) {
                     trackView.apply {
                         trackColor = android.graphics.Color.parseColor("#FF9800") // Orange for image
-                        trackLabel = op.imageUri.lastPathSegment ?: "Image Overlay"
+                        trackLabel = when {
+                            op.id.startsWith("template_birthday_frame_") || op.imageUri.lastPathSegment == "birthday-frame.png" -> "Birthday frame"
+                            op.id.startsWith("template_death_skull_shake_") -> "Death skull shake"
+                            op.id.startsWith("template_frame_") -> op.id.removePrefix("template_frame_")
+                                .substringBeforeLast("_").replace('_', ' ').replaceFirstChar { it.uppercase() }
+                            else -> op.imageUri.lastPathSegment ?: "Image Overlay"
+                        }
                         trackIcon = androidx.core.content.ContextCompat.getDrawable(this@VideoEditingActivity, R.drawable.ic_image_24)
                         activeStartMs = op.startTimeMs ?: 0L
                         activeEndMs = op.endTimeMs ?: totalSequenceDuration
@@ -6895,7 +6901,14 @@ class VideoEditingActivity : AppCompatActivity() {
                         topMargin = 4.dpToPx()
                     }
                     trackColor = android.graphics.Color.parseColor("#4CAF50") // Green for audio
-                    trackLabel = op.audioUri.lastPathSegment ?: "Audio Track"
+                    trackLabel = when {
+                        op.id.startsWith("template_birthday_song_") -> "Birthday song"
+                        op.id.startsWith("template_birthday_chime_") -> "Birthday chime"
+                        op.id.startsWith("template_death_freeze_sound_") -> "Freeze sound"
+                        op.id.startsWith("template_death_impact_") -> "Impact sound"
+                        op.id.startsWith("template_death_shake_sound_") -> "Shake sound"
+                        else -> op.audioUri.lastPathSegment ?: "Audio Track"
+                    }
                     isAudioTrack = true
                     isSelectedTrack = (op.id == viewModel.selectedOperationId.value)
                     trackIcon = androidx.core.content.ContextCompat.getDrawable(this@VideoEditingActivity, R.drawable.ic_audio_24)
@@ -7344,36 +7357,91 @@ class VideoEditingActivity : AppCompatActivity() {
                 getSequenceItems().indices.forEach { viewModel.setColorFilter(it, "monochrome") }
                 val duration = getTotalSequenceDuration()
                 val cueStart = freezeAtMs.coerceAtMost(duration)
-                viewModel.addTextOperation(
-                    text = "RIP",
-                    fontSize = 64,
-                    position = "Center Align",
-                    color = "#FFFFFF",
-                    startTimeMs = cueStart,
-                    endTimeMs = (cueStart + 2800L).coerceAtMost(duration)
+                val cueEnd = (cueStart + 2800L).coerceAtMost(duration)
+                val templateStamp = System.nanoTime()
+                viewModel.addOperation(
+                    EditOperation.AddText(
+                        text = "RIP",
+                        fontSize = 64,
+                        position = TextPosition.CENTER,
+                        color = "#FFFFFF",
+                        startTimeMs = cueStart,
+                        endTimeMs = cueEnd,
+                        id = "template_death_title_$templateStamp",
+                        borderThickness = 2,
+                        borderColor = "#171922"
+                    )
+                )
+                val skullDrawable = resources.getDrawable(R.drawable.death_skull, theme)
+                val canvasAspect = currentCanvasAspect(viewModel.project.value, 9f / 16f)
+                val skullSize = overlaySizeForAspect(
+                    skullDrawable.intrinsicWidth.toFloat() / skullDrawable.intrinsicHeight.coerceAtLeast(1),
+                    canvasAspect,
+                    0.28f
+                )
+                val shakeKeyframes = listOf(
+                    EditOperation.KeyframePoint(0L, 0.50f, 0.42f),
+                    EditOperation.KeyframePoint(70L, 0.45f, 0.39f),
+                    EditOperation.KeyframePoint(140L, 0.55f, 0.46f),
+                    EditOperation.KeyframePoint(220L, 0.44f, 0.42f),
+                    EditOperation.KeyframePoint(300L, 0.56f, 0.39f),
+                    EditOperation.KeyframePoint(380L, 0.46f, 0.46f),
+                    EditOperation.KeyframePoint(470L, 0.54f, 0.41f),
+                    EditOperation.KeyframePoint(580L, 0.48f, 0.43f),
+                    EditOperation.KeyframePoint(720L, 0.52f, 0.42f),
+                    EditOperation.KeyframePoint(900L, 0.50f, 0.42f)
                 )
                 viewModel.addOperation(
                     EditOperation.AddImageOverlay(
-                        imageUri = Uri.parse("android.resource://$packageName/${R.drawable.ar_skull_mask}"),
+                        imageUri = Uri.parse("android.resource://$packageName/${R.drawable.death_skull}"),
                         relativeX = 0.5f,
                         relativeY = 0.42f,
-                        relativeWidth = 0.22f,
-                        relativeHeight = 0.22f,
+                        relativeWidth = skullSize.first,
+                        relativeHeight = skullSize.second,
                         rotationAngle = 0f,
                         startTimeMs = cueStart,
-                        endTimeMs = (cueStart + 2800L).coerceAtMost(duration),
+                        endTimeMs = cueEnd,
+                        id = "template_death_skull_shake_$templateStamp",
                         fileDurationMs = 2800L,
                         isLooping = true,
+                        positionKeyframes = shakeKeyframes,
+                        animationPreset = "Shake"
                     )
                 )
-                viewModel.addBackgroundAudioOperation(
-                    audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_stinger}"),
-                    volume = 0.72f,
-                    startTimeMs = cueStart,
-                    endTimeMs = (cueStart + 1800L).coerceAtMost(duration),
-                    originalDurationMs = 1500L,
-                    fadeInDurationMs = 20L,
-                    fadeOutDurationMs = 250L
+                viewModel.addOperation(
+                    EditOperation.AddBackgroundAudio(
+                        audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_stinger}"),
+                        volume = 0.72f,
+                        startTimeMs = cueStart,
+                        endTimeMs = (cueStart + 1800L).coerceAtMost(duration),
+                        originalDurationMs = 1650L,
+                        fadeInDurationMs = 20L,
+                        fadeOutDurationMs = 250L,
+                        id = "template_death_freeze_sound_$templateStamp"
+                    )
+                )
+                viewModel.addOperation(
+                    EditOperation.AddBackgroundAudio(
+                        audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_impact}"),
+                        volume = 0.84f,
+                        startTimeMs = cueStart,
+                        endTimeMs = (cueStart + 720L).coerceAtMost(duration),
+                        originalDurationMs = 720L,
+                        fadeOutDurationMs = 180L,
+                        id = "template_death_impact_$templateStamp"
+                    )
+                )
+                viewModel.addOperation(
+                    EditOperation.AddBackgroundAudio(
+                        audioUri = Uri.parse("android.resource://$packageName/${R.raw.shake_rattle}"),
+                        volume = 0.7f,
+                        startTimeMs = (cueStart + 120L).coerceAtMost(duration),
+                        endTimeMs = (cueStart + 1020L).coerceAtMost(duration),
+                        originalDurationMs = 900L,
+                        fadeInDurationMs = 10L,
+                        fadeOutDurationMs = 200L,
+                        id = "template_death_shake_sound_$templateStamp"
+                    )
                 )
                 viewModel.project.value?.let { renderTracks(it) }
             }
@@ -7443,20 +7511,8 @@ class VideoEditingActivity : AppCompatActivity() {
         }
         val drawable = resources.getDrawable(imageResource, theme)
         val imageAspect = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.coerceAtLeast(1)
-        val canvasAspect = project.operations.filterIsInstance<EditOperation.Crop>().lastOrNull()?.let { crop ->
-            when (crop.aspectRatio) {
-                "16:9" -> 16f / 9f
-                "9:16" -> 9f / 16f
-                "1:1" -> 1f
-                else -> if (crop.customWidth > 0 && crop.customHeight > 0) crop.customWidth.toFloat() / crop.customHeight else null
-            }
-        } ?: 9f / 16f
-        val maxSide = 0.96f
-        val (overlayWidth, overlayHeight) = if (imageAspect > canvasAspect) {
-            maxSide to (maxSide * canvasAspect / imageAspect)
-        } else {
-            (maxSide * imageAspect / canvasAspect) to maxSide
-        }
+        val (overlayWidth, overlayHeight) = overlaySizeForAspect(imageAspect, currentCanvasAspect(project, 9f / 16f), 0.96f)
+        val templateStamp = System.nanoTime()
         viewModel.addOperation(
             EditOperation.AddImageOverlay(
                 imageUri = Uri.parse("android.resource://$packageName/$imageResource"),
@@ -7468,11 +7524,30 @@ class VideoEditingActivity : AppCompatActivity() {
                 startTimeMs = 0L,
                 endTimeMs = duration,
                 fileDurationMs = duration,
-                id = "template_frame_${templateName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")}_${System.nanoTime()}"
+                id = "template_frame_${templateName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")}_$templateStamp"
             )
         )
         viewModel.project.value?.let { renderTracks(it) }
         Toast.makeText(this, "$templateName added as a timeline overlay.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun currentCanvasAspect(project: VideoProject?, fallback: Float): Float =
+        project?.operations?.filterIsInstance<EditOperation.Crop>()?.lastOrNull()?.let { crop ->
+            when (crop.aspectRatio) {
+                "16:9" -> 16f / 9f
+                "9:16" -> 9f / 16f
+                "1:1" -> 1f
+                else -> if (crop.customWidth > 0 && crop.customHeight > 0) crop.customWidth.toFloat() / crop.customHeight else null
+            }
+        }?.takeIf { it.isFinite() && it > 0f } ?: fallback
+
+    private fun overlaySizeForAspect(imageAspect: Float, canvasAspect: Float, maxSide: Float): Pair<Float, Float> {
+        if (imageAspect <= 0f || canvasAspect <= 0f) return maxSide to maxSide
+        return if (imageAspect > canvasAspect) {
+            maxSide to (maxSide * canvasAspect / imageAspect)
+        } else {
+            (maxSide * imageAspect / canvasAspect) to maxSide
+        }
     }
 
     private fun showCreatorWatermarkDialog() {
@@ -7811,20 +7886,34 @@ class VideoEditingActivity : AppCompatActivity() {
             }
         }
 
-        searchButton.setOnClickListener { loadResults() }
+        fun submitSearch() {
+            when (mediaType) {
+                "music", "sound-effects" -> {
+                    val category = mediaType
+                    sheet.dismiss()
+                    showPixabayAudioBrowser(category, query.text?.toString().orEmpty())
+                }
+                else -> loadResults()
+            }
+        }
+        searchButton.setOnClickListener { submitSearch() }
         query.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
-                loadResults()
+                submitSearch()
                 true
             } else false
         }
         imagesChip.setOnClickListener { mediaType = "images"; loadResults("") }
         videosChip.setOnClickListener { mediaType = "videos"; loadResults("") }
         musicChip.setOnClickListener {
-            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/music/"))) }
+            mediaType = "music"
+            sheet.dismiss()
+            showPixabayAudioBrowser("music", query.text?.toString().orEmpty())
         }
         effectsChip.setOnClickListener {
-            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/sound-effects/"))) }
+            mediaType = "sound-effects"
+            sheet.dismiss()
+            showPixabayAudioBrowser("sound-effects", query.text?.toString().orEmpty())
         }
 
         sheet.setContentView(root)
@@ -7832,6 +7921,166 @@ class VideoEditingActivity : AppCompatActivity() {
         sheet.behavior.peekHeight = resources.displayMetrics.heightPixels * 4 / 5
         sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
         loadResults("")
+    }
+
+    /** Pixabay has no supported audio search API, so keep its official download page in-app
+     * and import the user-selected audio file when the site's Free Download action fires. */
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun showPixabayAudioBrowser(category: String, searchTerm: String = "") {
+        val isMusic = category == "music"
+        val audioSheet = BottomSheetDialog(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(12.dpToPx(), 12.dpToPx(), 12.dpToPx(), 8.dpToPx())
+            background = getDrawable(R.drawable.floating_panel_background)
+        }
+        val header = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val title = TextView(this).apply {
+            text = if (isMusic) "Pixabay music" else "Pixabay sound effects"
+            textSize = 19f
+            setTextColor(getColor(R.color.textColor))
+        }
+        header.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val close = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_close_24)
+            contentDescription = "Close Pixabay audio"
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            setOnClickListener { audioSheet.dismiss() }
+        }
+        header.addView(close, LinearLayout.LayoutParams(44.dpToPx(), 44.dpToPx()))
+        root.addView(header)
+        val status = TextView(this).apply {
+            text = "Browse Pixabay here and tap Free Download to add audio to your timeline."
+            textSize = 12f
+            setTextColor(getColor(R.color.toolTextInactive))
+            setPadding(0, 0, 0, 6.dpToPx())
+        }
+        root.addView(status)
+        val webView = android.webkit.WebView(this).apply {
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.loadsImagesAutomatically = true
+            webViewClient = object : android.webkit.WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: android.webkit.WebView?, request: android.webkit.WebResourceRequest?): Boolean {
+                    val url = request?.url ?: return false
+                    val host = url.host.orEmpty()
+                    return url.scheme != "https" || !(host.equals("pixabay.com", true) || host.endsWith(".pixabay.com", true))
+                }
+            }
+            setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
+                downloadAndAddPixabayAudio(url, userAgent, contentDisposition, mimeType, audioSheet, status)
+            }
+        }
+        root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        audioSheet.setContentView(root)
+        audioSheet.setOnDismissListener { webView.stopLoading(); webView.destroy() }
+        audioSheet.show()
+        audioSheet.behavior.peekHeight = resources.displayMetrics.heightPixels * 4 / 5
+        audioSheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        val basePath = if (isMusic) "music" else "sound-effects"
+        val queryPath = searchTerm.trim().takeIf { it.isNotEmpty() }?.let { "/search/${Uri.encode(it)}/" }.orEmpty()
+        webView.loadUrl("https://pixabay.com/$basePath$queryPath")
+    }
+
+    private fun downloadAndAddPixabayAudio(
+        address: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        audioSheet: BottomSheetDialog,
+        status: TextView,
+    ) {
+        val url = runCatching { java.net.URL(address) }.getOrNull()
+        if (url == null || url.protocol != "https" ||
+            !(url.host.equals("pixabay.com", true) || url.host.endsWith(".pixabay.com", true))) {
+            Toast.makeText(this, "That download is not from Pixabay.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val downloadUrl = url
+        status.text = "Downloading from Pixabay…"
+        showLoading("Adding Pixabay audio…", "Downloading and preparing the selected audio")
+        val cookies = android.webkit.CookieManager.getInstance().getCookie(address)
+        lifecycleScope.launch {
+            try {
+                val imported = withContext(Dispatchers.IO) {
+                    val directory = File(filesDir, "pixabay-media").apply { mkdirs() }
+                    val guessed = android.webkit.URLUtil.guessFileName(address, contentDisposition, mimeType)
+                    val extension = guessed.substringAfterLast('.', "mp3").lowercase(Locale.ROOT)
+                        .takeIf { it in setOf("mp3", "wav", "ogg", "m4a", "aac", "flac") } ?: "mp3"
+                    val target = File(directory, "pixabay-audio-${System.currentTimeMillis()}.$extension")
+                    val part = File(directory, target.name + ".part")
+                    val connection = (downloadUrl.openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 15_000
+                        readTimeout = 60_000
+                        instanceFollowRedirects = true
+                        setRequestProperty("Accept", "audio/*,application/octet-stream,*/*;q=0.8")
+                        setRequestProperty("User-Agent", userAgent?.takeIf { it.isNotBlank() } ?: "Mhirex/1.0 (Android)")
+                        setRequestProperty("Referer", "https://pixabay.com/")
+                        if (!cookies.isNullOrBlank()) setRequestProperty("Cookie", cookies)
+                    }
+                    try {
+                        val responseCode = connection.responseCode
+                        if (responseCode !in 200..299) throw IllegalStateException("Pixabay audio download failed (HTTP $responseCode)")
+                        val finalHost = connection.url.host
+                        if (!(finalHost.equals("pixabay.com", true) || finalHost.endsWith(".pixabay.com", true))) {
+                            throw IllegalStateException("Pixabay redirected the download to an unsupported host")
+                        }
+                        if (connection.contentLengthLong > 100L * 1024L * 1024L) throw IllegalStateException("Audio file is too large")
+                        connection.inputStream.use { input -> part.outputStream().buffered().use { output ->
+                            val buffer = ByteArray(64 * 1024)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > 100L * 1024L * 1024L) throw IllegalStateException("Audio file is too large")
+                                output.write(buffer, 0, count)
+                            }
+                        } }
+                    } catch (error: Exception) {
+                        part.delete()
+                        throw error
+                    } finally {
+                        connection.disconnect()
+                    }
+                    if (part.length() <= 0L || !part.renameTo(target)) {
+                        part.delete()
+                        throw IllegalStateException("Pixabay audio download was incomplete")
+                    }
+                    val retriever = MediaMetadataRetriever()
+                    val duration = try {
+                        retriever.setDataSource(target.absolutePath)
+                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                    if (duration <= 0L) {
+                        target.delete()
+                        throw IllegalStateException("Downloaded file could not be read as audio")
+                    }
+                    target to duration
+                }
+                val totalDuration = getTotalSequenceDuration()
+                val endTime = if (totalDuration > 0L) minOf(totalDuration, imported.second) else imported.second
+                viewModel.addBackgroundAudioOperation(
+                    audioUri = Uri.fromFile(imported.first),
+                    startTimeMs = 0L,
+                    endTimeMs = endTime,
+                    internalStartMs = 0L,
+                    internalEndMs = imported.second,
+                    originalDurationMs = imported.second,
+                )
+                viewModel.project.value?.let { renderTracks(it) }
+                audioSheet.dismiss()
+                Toast.makeText(this@VideoEditingActivity, "Pixabay audio added to the timeline.", Toast.LENGTH_SHORT).show()
+            } catch (error: Exception) {
+                Log.w(TAG, "Pixabay audio import failed", error)
+                status.text = error.message ?: "Could not download this audio."
+                Toast.makeText(this@VideoEditingActivity, status.text, Toast.LENGTH_LONG).show()
+            } finally {
+                hideLoading()
+            }
+        }
     }
 
     private fun downloadAndAddPixabayVideo(hit: com.mhirex.editor.services.PixabayMediaHit) {
@@ -7952,32 +8201,44 @@ class VideoEditingActivity : AppCompatActivity() {
                         target.delete()
                     }
                     val part = File(directory, "pixabay-image-${hit.id}.part")
-                    val connection = (java.net.URL(imageUrl).openConnection() as java.net.HttpURLConnection).apply {
-                        connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
-                        setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
-                        setRequestProperty("User-Agent", "Mhirex/1.0 (Android)")
-                        setRequestProperty("Referer", "https://pixabay.com/")
-                    }
-                    try {
-                        val status = connection.responseCode
-                        if (status !in 200..299) throw IllegalStateException("Image download failed (HTTP $status)")
-                        val contentType = connection.contentType.orEmpty().substringBefore(';').trim().lowercase(Locale.ROOT)
-                        if (contentType == "text/html" || contentType == "application/json") {
-                            throw IllegalStateException("Pixabay returned a non-image file")
+                    var downloaded = false
+                    var lastRateLimit: IllegalStateException? = null
+                    for (attempt in 0..2) {
+                        val connection = (java.net.URL(imageUrl).openConnection() as java.net.HttpURLConnection).apply {
+                            connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
+                            setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                            setRequestProperty("User-Agent", "Mhirex/1.0 (Android)")
+                            setRequestProperty("Referer", "https://pixabay.com/")
                         }
-                        if (connection.contentLengthLong > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
-                        connection.inputStream.use { input -> part.outputStream().buffered().use { output ->
-                            val buffer = ByteArray(64 * 1024); var total = 0L
-                            while (true) {
-                                val count = input.read(buffer); if (count < 0) break; total += count
-                                if (total > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
-                                output.write(buffer, 0, count)
+                        try {
+                            val status = connection.responseCode
+                            if (status == 429 && attempt < 2) {
+                                val retryAfterSeconds = connection.getHeaderField("Retry-After")?.toLongOrNull()
+                                val delayMs = ((retryAfterSeconds ?: (1L shl attempt)) * 1000L).coerceIn(500L, 10_000L)
+                                lastRateLimit = IllegalStateException("Image download failed (HTTP 429); retrying")
+                                Thread.sleep(delayMs)
+                                continue
                             }
-                        } }
-                    } catch (error: Exception) {
-                        part.delete()
-                        throw error
-                    } finally { connection.disconnect() }
+                            if (status !in 200..299) throw IllegalStateException("Image download failed (HTTP $status)")
+                            val contentType = connection.contentType.orEmpty().substringBefore(';').trim().lowercase(Locale.ROOT)
+                            if (contentType == "text/html" || contentType == "application/json") {
+                                throw IllegalStateException("Pixabay returned a non-image file")
+                            }
+                            if (connection.contentLengthLong > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
+                            part.delete()
+                            connection.inputStream.use { input -> part.outputStream().buffered().use { output ->
+                                val buffer = ByteArray(64 * 1024); var total = 0L
+                                while (true) {
+                                    val count = input.read(buffer); if (count < 0) break; total += count
+                                    if (total > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
+                                    output.write(buffer, 0, count)
+                                }
+                            } }
+                            downloaded = true
+                            break
+                        } finally { connection.disconnect() }
+                    }
+                    if (!downloaded) throw lastRateLimit ?: IllegalStateException("Image download failed (HTTP 429)")
                     if (part.length() <= 0L) {
                         part.delete()
                         throw IllegalStateException("Image download was incomplete")
@@ -7994,12 +8255,17 @@ class VideoEditingActivity : AppCompatActivity() {
                     }
                     target
                 }
-                val duration = getTotalSequenceDuration().coerceAtLeast(1000L)
-                viewModel.addImageOverlayOperation(Uri.fromFile(file), 0.12f, 0.12f, 0.76f, 0.76f, 0f, 0L, duration)
+                val sequenceDuration = getTotalSequenceDuration().coerceAtLeast(1000L)
+                val startTime = getGlobalPosition().coerceIn(0L, (sequenceDuration - 1L).coerceAtLeast(0L))
+                val endTime = minOf(sequenceDuration, startTime + 3000L).coerceAtLeast(startTime + 1L)
+                viewModel.addImageOverlayOperation(
+                    Uri.fromFile(file), 0.12f, 0.12f, 0.76f, 0.76f, 0f,
+                    startTime, endTime, fileDurationMs = endTime - startTime,
+                )
                 viewModel.addTextOperation(
                     text = "Photo: Pixabay / ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)}",
                     fontSize = 16, position = "Bottom Center", color = "#FFFFFF",
-                    startTimeMs = 0L, endTimeMs = duration
+                    startTimeMs = startTime, endTimeMs = endTime
                 )
                 viewModel.project.value?.let { renderTracks(it) }
                 Toast.makeText(this@VideoEditingActivity, "Image added to the timeline.", Toast.LENGTH_SHORT).show()
@@ -8015,52 +8281,72 @@ class VideoEditingActivity : AppCompatActivity() {
             Toast.makeText(this, "Add a video clip before applying this template.", Toast.LENGTH_SHORT).show()
             return
         }
-        val creditStart = (duration - 3200L).coerceAtLeast(0L)
-        viewModel.addTextOperation(
-            text = "HAPPY BIRTHDAY!",
-            fontSize = 52,
-            position = "Center Align",
-            color = "#FFFFFF",
-            startTimeMs = 0L,
-            endTimeMs = duration
+        val templateStamp = System.nanoTime()
+        viewModel.addOperation(
+            EditOperation.AddText(
+                text = "HAPPY BIRTHDAY!",
+                fontSize = 48,
+                position = TextPosition.CENTER,
+                relativeX = 0.5f,
+                relativeY = 0.2f,
+                color = "#FFF8E8",
+                startTimeMs = 0L,
+                endTimeMs = duration,
+                id = "template_birthday_title_$templateStamp",
+                borderThickness = 3,
+                borderColor = "#8B2251",
+                scaleKeyframes = listOf(
+                    EditOperation.KeyframePoint(0L, 0.72f),
+                    EditOperation.KeyframePoint(320L, 1.08f),
+                    EditOperation.KeyframePoint(560L, 0.97f),
+                    EditOperation.KeyframePoint(820L, 1f)
+                ),
+                opacityKeyframes = listOf(
+                    EditOperation.KeyframePoint(0L, 0f),
+                    EditOperation.KeyframePoint(280L, 1f)
+                ),
+                animationPreset = "Bounce"
+            )
         )
         val birthdayFrame = createBirthdayFrameAsset()
-        viewModel.addImageOverlayOperation(
-            imageUri = Uri.fromFile(birthdayFrame),
-            relativeX = 0f,
-            relativeY = 0f,
-            relativeWidth = 1f,
-            relativeHeight = 1f,
-            rotationAngle = 0f,
-            startTimeMs = 0L,
-            endTimeMs = duration,
-            fileDurationMs = duration
+        val frameSize = overlaySizeForAspect(720f / 1280f, currentCanvasAspect(viewModel.project.value, 9f / 16f), 0.96f)
+        viewModel.addOperation(
+            EditOperation.AddImageOverlay(
+                imageUri = Uri.fromFile(birthdayFrame),
+                relativeX = 0.5f,
+                relativeY = 0.5f,
+                relativeWidth = frameSize.first,
+                relativeHeight = frameSize.second,
+                rotationAngle = 0f,
+                startTimeMs = 0L,
+                endTimeMs = duration,
+                id = "template_birthday_frame_$templateStamp",
+                fileDurationMs = duration
+            )
         )
-        viewModel.addTextOperation(
-            text = "Happy Birthday · Mhirex melody",
-            fontSize = 20,
-            position = "Bottom Center",
-            color = "#FFFFFF",
-            startTimeMs = creditStart,
-            endTimeMs = duration
+        viewModel.addOperation(
+            EditOperation.AddBackgroundAudio(
+                audioUri = Uri.parse("android.resource://$packageName/${R.raw.happy_birthday_melody}"),
+                volume = 0.8f,
+                startTimeMs = 0L,
+                endTimeMs = duration,
+                originalDurationMs = 14500L,
+                fadeInDurationMs = 150L,
+                fadeOutDurationMs = 450L,
+                id = "template_birthday_song_$templateStamp"
+            )
         )
-        viewModel.addBackgroundAudioOperation(
-            audioUri = Uri.parse("android.resource://$packageName/${R.raw.happy_birthday_melody}"),
-            volume = 0.8f,
-            startTimeMs = 0L,
-            endTimeMs = duration,
-            originalDurationMs = 14500L,
-            fadeInDurationMs = 150L,
-            fadeOutDurationMs = 450L
-        )
-        viewModel.addBackgroundAudioOperation(
-            audioUri = Uri.parse("android.resource://$packageName/${R.raw.birthday_chime}"),
-            volume = 0.62f,
-            startTimeMs = 0L,
-            endTimeMs = minOf(duration, 1550L),
-            originalDurationMs = 1550L,
-            fadeInDurationMs = 10L,
-            fadeOutDurationMs = 300L
+        viewModel.addOperation(
+            EditOperation.AddBackgroundAudio(
+                audioUri = Uri.parse("android.resource://$packageName/${R.raw.birthday_chime}"),
+                volume = 0.62f,
+                startTimeMs = 0L,
+                endTimeMs = minOf(duration, 1550L),
+                originalDurationMs = 1550L,
+                fadeInDurationMs = 10L,
+                fadeOutDurationMs = 300L,
+                id = "template_birthday_chime_$templateStamp"
+            )
         )
         viewModel.project.value?.let { renderTracks(it) }
     }
@@ -9486,7 +9772,7 @@ class VideoEditingActivity : AppCompatActivity() {
         val operationId = viewModel.selectedOperationId.value ?: return
         val project = viewModel.project.value ?: return
         val imageOp = project.operations.firstOrNull { it.id == operationId } as? EditOperation.AddImageOverlay ?: return
-        val presets = arrayOf("None", "Bounce", "Pop", "Spin in", "Fade in")
+        val presets = arrayOf("None", "Bounce", "Pop", "Spin in", "Fade in", "Shake")
         MaterialAlertDialogBuilder(this)
             .setTitle("Sticker animation")
             .setItems(presets) { _, index ->
@@ -9499,9 +9785,20 @@ class VideoEditingActivity : AppCompatActivity() {
                 }
                 val opacity = if (preset == "Fade in" || preset == "Bounce" || preset == "Pop" || preset == "Spin in") listOf(EditOperation.KeyframePoint(0L, 0f), EditOperation.KeyframePoint((duration * 0.35f).toLong(), 1f)) else emptyList()
                 val rotation = if (preset == "Spin in") listOf(EditOperation.KeyframePoint(0L, -130f), EditOperation.KeyframePoint(duration, 0f)) else emptyList()
+                val position = if (preset == "Shake") listOf(
+                    EditOperation.KeyframePoint(0L, imageOp.relativeX, imageOp.relativeY),
+                    EditOperation.KeyframePoint(70L, imageOp.relativeX - 0.045f, imageOp.relativeY - 0.025f),
+                    EditOperation.KeyframePoint(140L, imageOp.relativeX + 0.045f, imageOp.relativeY + 0.035f),
+                    EditOperation.KeyframePoint(220L, imageOp.relativeX - 0.05f, imageOp.relativeY),
+                    EditOperation.KeyframePoint(300L, imageOp.relativeX + 0.05f, imageOp.relativeY - 0.025f),
+                    EditOperation.KeyframePoint(390L, imageOp.relativeX - 0.035f, imageOp.relativeY + 0.035f),
+                    EditOperation.KeyframePoint(500L, imageOp.relativeX + 0.03f, imageOp.relativeY - 0.015f),
+                    EditOperation.KeyframePoint(650L, imageOp.relativeX - 0.015f, imageOp.relativeY + 0.01f),
+                    EditOperation.KeyframePoint(duration, imageOp.relativeX, imageOp.relativeY)
+                ) else emptyList()
                 viewModel.executeCommand(UpdateOperationCommand(operationId, "Apply $preset sticker animation") { operation ->
                     val op = operation as? EditOperation.AddImageOverlay ?: return@UpdateOperationCommand operation
-                    op.copy(animationPreset = preset, scaleKeyframes = scales, opacityKeyframes = opacity, rotationKeyframes = rotation)
+                    op.copy(animationPreset = preset, scaleKeyframes = scales, opacityKeyframes = opacity, rotationKeyframes = rotation, positionKeyframes = position)
                 })
             }
             .show()

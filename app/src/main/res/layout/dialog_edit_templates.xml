@@ -23,7 +23,7 @@
         android:paddingHorizontal="20dp"
         android:layout_marginTop="3dp"
         android:layout_marginBottom="14dp"
-        android:text="Choose a visual style to add editable effects to your timeline."
+        android:text="Templates add editable text, image and sound tracks. Select a track to change it."
         android:textColor="@color/toolTextInactive"
         android:textSize="13sp" />
 
@@ -51,9 +51,9 @@
                 app:strokeColor="#667C8799"
                 app:strokeWidth="1dp">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
-                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Freeze and skull template preview" android:src="@drawable/template_preview_freeze" android:scaleType="centerCrop" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Freeze + ☠" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
-                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Mono freeze frame" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:background="#242630" android:contentDescription="Death freeze and shake template preview" android:src="@drawable/death_skull" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Freeze + Death 💀" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Freeze · shake · impact sounds" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
