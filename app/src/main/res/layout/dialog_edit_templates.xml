@@ -1,147 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:fillViewport="true"
-    android:background="@drawable/floating_panel_background">
-
-  <LinearLayout
-      android:layout_width="match_parent"
-      android:layout_height="wrap_content"
-      android:orientation="vertical"
-      android:padding="16dp">
+    android:orientation="vertical"
+    android:background="@drawable/floating_panel_background"
+    android:paddingTop="20dp"
+    android:paddingBottom="20dp">
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Quick edit templates"
+        android:paddingHorizontal="20dp"
+        android:text="Templates"
         android:textColor="@color/textColor"
-        android:textSize="20sp"
+        android:textSize="21sp"
         android:fontFamily="sans-serif-medium" />
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="12dp"
-        android:text="Templates add normal editable timeline changes. Undo to remove them."
+        android:paddingHorizontal="20dp"
+        android:layout_marginTop="3dp"
+        android:layout_marginBottom="14dp"
+        android:text="Choose a visual style to add editable effects to your timeline."
         android:textColor="@color/toolTextInactive"
         android:textSize="13sp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnTemplateFreezeSkull"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+    <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="☠  Freeze + monochrome"
-        android:textAllCaps="false" />
+        android:scrollbars="none"
+        android:clipToPadding="false">
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingHorizontal="14dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginBottom="8dp"
-        android:text="Freeze at the playhead, apply black and white, add a title and a short original stinger."
-        android:textColor="@color/toolTextInactive"
-        android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateFreezeSkull"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#667C8799"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Freeze and skull template preview" android:src="@drawable/template_preview_freeze" android:scaleType="centerCrop" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Freeze + ☠" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Mono freeze frame" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnTemplateBirthday"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="🎂  Happy birthday"
-        android:textAllCaps="false" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateBirthday"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Birthday frame and balloon template preview" android:src="@drawable/template_preview_birthday" android:scaleType="centerCrop" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Happy Birthday" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Frames + balloons" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginBottom="8dp"
-        android:text="Add a synthesized birthday melody, a celebratory chime, title and end credit."
-        android:textColor="@color/toolTextInactive"
-        android:textSize="12sp" />
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateNoir"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#667C8799"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Noir video template preview" android:src="@drawable/template_preview_noir" android:scaleType="centerCrop" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Noir montage" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="B&amp;W + transitions" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnSongLinkInfo"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="♫  Spotify song link"
-        android:textAllCaps="false" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnPixabayExplore"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="Explore Pixabay media"
-        android:textAllCaps="false" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnTemplateNoir"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="◐  Noir montage"
-        android:textAllCaps="false" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginBottom="8dp"
-        android:text="Monochrome grade, subtle vignette and automatic varied transitions."
-        android:textColor="@color/toolTextInactive"
-        android:textSize="12sp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnTemplateSlowMoment"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="start|center_vertical"
-        android:text="⏱  Slow this moment"
-        android:textAllCaps="false" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:layout_marginBottom="8dp"
-        android:text="Split the selected clip at the playhead and slow the section after it to 0.5×."
-        android:textColor="@color/toolTextInactive"
-        android:textSize="12sp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnMotionScrub"
-        style="@style/Widget.MaterialComponents.Button"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Enable gyro motion scrub"
-        android:textAllCaps="false" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnArFaces"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Add tracked face effect"
-        android:textAllCaps="false" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnCreatorWatermark"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Add creator watermark"
-        android:textAllCaps="false" />
-  </LinearLayout>
-</ScrollView>
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateSlowMoment"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#667C8799"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Slow motion template preview" android:src="@drawable/template_preview_slow" android:scaleType="centerCrop" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Slow this moment" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Half speed segment" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </HorizontalScrollView>
+</LinearLayout>

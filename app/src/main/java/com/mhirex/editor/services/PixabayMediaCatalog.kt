@@ -14,10 +14,11 @@ data class PixabayMediaHit(
     val tags: String,
     val creator: String,
     val pageUrl: String,
+    val previewUrl: String,
     val downloadUrl: String?,
 )
 
-/** Small, human-query-only Pixabay client with the API's required 24-hour response cache. */
+/** User-driven Pixabay discovery with a 24-hour cache for browse and search results. */
 object PixabayMediaCatalog {
     private const val CACHE_NAME = "pixabay_search_cache"
     private const val CACHE_TTL_MS = 24L * 60L * 60L * 1000L
@@ -25,8 +26,7 @@ object PixabayMediaCatalog {
     suspend fun search(context: Context, query: String, mediaType: String): List<PixabayMediaHit> = withContext(Dispatchers.IO) {
         require(mediaType == "images" || mediaType == "videos")
         val normalizedQuery = query.trim().take(100)
-        require(normalizedQuery.isNotBlank())
-        val cacheKey = sha256("$mediaType\u0000${normalizedQuery.lowercase()}")
+        val cacheKey = sha256("$mediaType\u0000${normalizedQuery.lowercase().ifBlank { "popular" }}")
         val prefs = context.getSharedPreferences(CACHE_NAME, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
         val cachedAt = prefs.getLong("$cacheKey:time", 0L)
@@ -34,8 +34,9 @@ object PixabayMediaCatalog {
         val body = if (cachedJson != null && now - cachedAt < CACHE_TTL_MS) {
             cachedJson
         } else {
-            val encodedQuery = URLEncoder.encode(normalizedQuery, Charsets.UTF_8.name())
-            val url = java.net.URL("https://mhirex.vercel.app/api/pixabay?type=$mediaType&q=$encodedQuery")
+            val queryPart = normalizedQuery.takeIf { it.isNotBlank() }
+                ?.let { "&q=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+            val url = java.net.URL("https://mhirex.vercel.app/api/pixabay?type=$mediaType$queryPart")
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = 12_000
@@ -73,6 +74,11 @@ object PixabayMediaCatalog {
                 tags = hit.optString("tags", "Pixabay media").take(140),
                 creator = hit.optString("user", "Pixabay contributor").take(80),
                 pageUrl = pageUrl,
+                previewUrl = if (mediaType == "videos") {
+                    hit.optJSONObject("videos")?.optJSONObject("medium")?.optString("thumbnail")?.takeIf { it.isNotBlank() }.orEmpty()
+                } else {
+                    hit.optString("previewURL").takeIf { it.isNotBlank() }.orEmpty()
+                },
                 downloadUrl = downloadUrl,
             )
         }

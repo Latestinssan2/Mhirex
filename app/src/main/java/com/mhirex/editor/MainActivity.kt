@@ -17,6 +17,7 @@ import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
+import android.widget.LinearLayout
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -49,6 +50,8 @@ class MainActivity : AppCompatActivity() {
      */
     private lateinit var profileBinder: com.mhirex.editor.auth.ProfileBinder
     private var aboutAmbientAnimator: Animator? = null
+    private var selectedCanvasWidth = 1080
+    private var selectedCanvasHeight = 1920
     private val selectVideoLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
@@ -146,7 +149,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnImport.setBounceClickListener {
             Log.d("ButtonClick", "Launching video selection.")
-            selectVideo()
+            showCanvasFormatPicker()
         }
 
         binding.btnOpenProject.setBounceClickListener {
@@ -681,10 +684,52 @@ class MainActivity : AppCompatActivity() {
         picker.show(supportFragmentManager, "MediaPickerBottomSheet")
     }
 
+    private fun showCanvasFormatPicker() {
+        val options = arrayOf("Instagram Reel · 1080 × 1920 (9:16)", "YouTube video · 1920 × 1080 (16:9)", "Square · 1080 × 1080 (1:1)", "Custom resolution")
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Choose your video format")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> { selectedCanvasWidth = 1080; selectedCanvasHeight = 1920; selectVideo() }
+                    1 -> { selectedCanvasWidth = 1920; selectedCanvasHeight = 1080; selectVideo() }
+                    2 -> { selectedCanvasWidth = 1080; selectedCanvasHeight = 1080; selectVideo() }
+                    else -> showCustomCanvasDialog()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showCustomCanvasDialog() {
+        fun px(dp: Int) = (dp * resources.displayMetrics.density).toInt()
+        val inputs = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(px(24), px(8), px(24), 0) }
+        val widthInput = com.google.android.material.textfield.TextInputEditText(this).apply { hint = "Width"; inputType = android.text.InputType.TYPE_CLASS_NUMBER; setText("1080") }
+        val heightInput = com.google.android.material.textfield.TextInputEditText(this).apply { hint = "Height"; inputType = android.text.InputType.TYPE_CLASS_NUMBER; setText("1920") }
+        inputs.addView(widthInput, LinearLayout.LayoutParams(0, px(56), 1f))
+        inputs.addView(heightInput, LinearLayout.LayoutParams(0, px(56), 1f).apply { marginStart = px(12) })
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle("Custom video resolution")
+            .setMessage("Enter width and height in pixels (64–3840).")
+            .setView(inputs)
+            .setPositiveButton("Choose media") { _, _ ->
+                val width = widthInput.text?.toString()?.toIntOrNull()
+                val height = heightInput.text?.toString()?.toIntOrNull()
+                if (width == null || height == null || width !in 64..3840 || height !in 64..3840) {
+                    showToast("Enter width and height between 64 and 3840 pixels.")
+                } else {
+                    selectedCanvasWidth = width; selectedCanvasHeight = height; selectVideo()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private fun navigateToEditingScreen(videoUri: Uri) {
         Log.d("Navigation", "Navigating to editing screen with URI: $videoUri")
         val intent = Intent(this, VideoEditingActivity::class.java).apply {
             putExtra("VIDEO_URI", videoUri)
+            putExtra("CANVAS_WIDTH", selectedCanvasWidth)
+            putExtra("CANVAS_HEIGHT", selectedCanvasHeight)
             data = videoUri
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }

@@ -73,17 +73,6 @@
                 android:enabled="false"
                 app:tint="@color/textColor" />
 
-            <ImageButton
-                android:id="@+id/btnCreatorTools"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:src="@drawable/ic_public_24"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:contentDescription="Pixabay, templates, and watermarks"
-                android:layout_marginEnd="8dp"
-                app:tint="@color/textColor" />
 
             <ImageButton
                 android:id="@+id/btnPreview"
@@ -656,6 +645,130 @@
                 android:gravity="center"
                 android:paddingVertical="8dp"
                 android:paddingHorizontal="8dp">
+
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnPixabayLibrary"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/ic_public_24"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Browse Pixabay media"
+                        app:tint="@color/toolTextInactive" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Pixabay"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnTimelineTemplates"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/ic_layers_24"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Browse edit templates"
+                        app:tint="@color/toolTextInactive" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Templates"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnCreatorWatermarkBottom"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/brand_youtube"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Add creator watermark" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Watermark"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnArFacesBottom"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/ic_mask_24"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Add face tracked effects"
+                        app:tint="@color/toolTextInactive" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="AR Face"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnMotionScrubBottom"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/ic_mic_24"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Toggle gyro motion scrub"
+                        app:tint="@color/toolTextInactive" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Gyro"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="60dp"

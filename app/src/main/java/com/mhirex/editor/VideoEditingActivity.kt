@@ -72,6 +72,7 @@ import kotlinx.coroutines.Job
 import com.mhirex.editor.services.FFmpegRenderEngine
 import com.mhirex.editor.services.FaceEffectTracker
 import com.mhirex.editor.services.PixabayMediaCatalog
+import com.mhirex.editor.services.PixabayMediaAdapter
 import com.mhirex.editor.services.ProxyResultRecord
 import com.mhirex.editor.services.ProxyResultStore
 import com.mhirex.editor.utils.ErrorCode
@@ -2095,12 +2096,29 @@ class VideoEditingActivity : AppCompatActivity() {
             canvasBackgroundAction()
         }
 
+        findViewById<ImageButton>(R.id.btnPixabayLibrary)?.setBounceClickListener {
+            setActiveToolButton(R.id.btnPixabayLibrary)
+            showPixabayExploreDialog()
+        }
+        findViewById<ImageButton>(R.id.btnTimelineTemplates)?.setBounceClickListener {
+            setActiveToolButton(R.id.btnTimelineTemplates)
+            showEditTemplatesDialog()
+        }
+        findViewById<ImageButton>(R.id.btnCreatorWatermarkBottom)?.setBounceClickListener {
+            setActiveToolButton(R.id.btnCreatorWatermarkBottom)
+            showCreatorWatermarkDialog()
+        }
+        findViewById<ImageButton>(R.id.btnArFacesBottom)?.setBounceClickListener {
+            setActiveToolButton(R.id.btnArFacesBottom)
+            showTrackedFacePicker()
+        }
+        findViewById<ImageButton>(R.id.btnMotionScrubBottom)?.setBounceClickListener {
+            toggleMotionScrub()
+        }
+
         try {
             btnUndo = findViewById(R.id.btnUndo)
             btnRedo = findViewById(R.id.btnRedo)
-            findViewById<ImageButton>(R.id.btnCreatorTools)?.setBounceClickListener {
-                showCreatorToolsDialog()
-            }
             btnPreview = findViewById(R.id.btnPreview)
             btnUndo.setBounceClickListener {
                 if (isShowingPreview) dismissPreview()
@@ -2170,7 +2188,7 @@ class VideoEditingActivity : AppCompatActivity() {
 
     private fun setActiveToolButton(activeId: Int) {
         if (isShowingPreview) dismissPreview()
-        val toolIds = listOf(R.id.btnText, R.id.btnMediaOverlay, R.id.btnDraw, R.id.btnAudio, R.id.btnCrop, R.id.btnSubtitles, R.id.btnVoiceOver, R.id.btnCanvasBackground)
+        val toolIds = listOf(R.id.btnPixabayLibrary, R.id.btnTimelineTemplates, R.id.btnCreatorWatermarkBottom, R.id.btnArFacesBottom, R.id.btnMotionScrubBottom, R.id.btnText, R.id.btnMediaOverlay, R.id.btnDraw, R.id.btnAudio, R.id.btnCrop, R.id.btnSubtitles, R.id.btnVoiceOver, R.id.btnCanvasBackground)
         for (id in toolIds) {
             val btn = findViewById<ImageButton>(id) ?: continue
             btn.setBackgroundResource(if (id == activeId) R.drawable.tool_button_active else R.drawable.tool_button_inactive)
@@ -5570,6 +5588,12 @@ class VideoEditingActivity : AppCompatActivity() {
             if (projectUri == null) {
                 val displayName = videoUri!!.lastPathSegment ?: "video"
                 viewModel.initializeProject(videoUri!!, displayName)
+                val canvasWidth = intent.getIntExtra("CANVAS_WIDTH", 0)
+                val canvasHeight = intent.getIntExtra("CANVAS_HEIGHT", 0)
+                if (canvasWidth >= 64 && canvasHeight >= 64) {
+                    viewModel.setCanvasFormat(canvasWidth, canvasHeight)
+                    viewModel.setExportSettings(canvasHeight, viewModel.exportFps.value, viewModel.exportAudioOnly.value)
+                }
             }
         }
     }
@@ -7391,64 +7415,7 @@ class VideoEditingActivity : AppCompatActivity() {
 
         view.findViewById<View>(R.id.btnTemplateBirthday).setBounceClickListener {
             sheet.dismiss()
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Birthday song rights")
-                .setMessage("This template uses a new Mhirex synthesized recording of the familiar birthday melody. The recording is new, but composition rights can vary by country. Mhirex cannot grant song clearance; confirm local rights before sharing.")
-                .setPositiveButton("Add birthday template") { _, _ -> applyBirthdayTemplate() }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-
-        view.findViewById<View>(R.id.btnSongLinkInfo).setBounceClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Use music you have rights to")
-                .setMessage("Open a Spotify track in its official app, then import a licensed audio file with Add Audio. Mhirex cannot download audio from streaming links, and a link cannot prove or grant video-use rights.")
-                .setPositiveButton("Open Spotify") { _, _ -> showSpotifyLinkDialog() }
-                .setNeutralButton("Add licensed audio") { _, _ -> audioAction() }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-
-        view.findViewById<View>(R.id.btnPixabayExplore).setBounceClickListener {
-            sheet.dismiss()
-            showPixabayExploreDialog()
-        }
-
-        val motionButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnMotionScrub)
-        fun updateMotionButton() {
-            motionButton.text = if (motionScrubEnabled) "Disable gyro motion scrub" else "Enable gyro motion scrub"
-        }
-        updateMotionButton()
-        motionButton.setBounceClickListener {
-            if (motionScrubEnabled) {
-                setMotionScrubEnabled(false)
-            } else {
-                val manager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
-                if (manager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE) == null) {
-                    Toast.makeText(this, "This device has no gyroscope sensor.", Toast.LENGTH_SHORT).show()
-                } else {
-                    setMotionScrubEnabled(true)
-                    sheet.dismiss()
-                    Toast.makeText(this, "Tilt gently to scrub. Tap Templates to turn it off.", Toast.LENGTH_LONG).show()
-                }
-            }
-            updateMotionButton()
-        }
-        view.findViewById<View>(R.id.btnArFaces).setBounceClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("Tracked face effect")
-                .setMessage("Mhirex samples the selected clip on this device and tracks one face. Face frames are not uploaded; MediaPipe may send SDK performance and usage metrics.")
-                .setItems(arrayOf("Cyber goggles", "Skull mask")) { _, which ->
-                    val accessory = if (which == 0) FaceEffectTracker.Accessory.GOGGLES else FaceEffectTracker.Accessory.SKULL_MASK
-                    sheet.dismiss()
-                    applyTrackedFaceEffect(accessory)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }
-        view.findViewById<View>(R.id.btnCreatorWatermark).setBounceClickListener {
-            sheet.dismiss()
-            showCreatorWatermarkDialog()
+            applyBirthdayTemplate()
         }
         sheet.show()
     }
@@ -7661,27 +7628,30 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
-    private fun showCreatorToolsDialog() {
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Creator tools")
-            .setItems(arrayOf(
-                "Explore Pixabay library",
-                "Quick edit templates",
-                "Instagram / YouTube watermark",
-                "Import video from this device",
-                "Import licensed audio file",
-                "Open a Spotify link"
-            )) { _, which ->
-                when (which) {
-                    0 -> showPixabayExploreDialog()
-                    1 -> showEditTemplatesDialog()
-                    2 -> showCreatorWatermarkDialog()
-                    3 -> openFilePickerMerge()
-                    4 -> audioAction()
-                    5 -> showSpotifyLinkDialog()
-                }
+    private fun toggleMotionScrub() {
+        if (!motionScrubEnabled) {
+            val manager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+            if (manager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE) == null) {
+                Toast.makeText(this, "This device has no gyroscope sensor.", Toast.LENGTH_SHORT).show()
+                return
             }
-            .setNegativeButton("Close", null)
+            setMotionScrubEnabled(true)
+            setActiveToolButton(R.id.btnMotionScrubBottom)
+            Toast.makeText(this, "Tilt gently to scrub the timeline.", Toast.LENGTH_SHORT).show()
+        } else {
+            setMotionScrubEnabled(false)
+            setActiveToolButton(View.NO_ID)
+        }
+    }
+
+    private fun showTrackedFacePicker() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("AR face effects")
+            .setItems(arrayOf("Cyber goggles", "Skull mask")) { _, which ->
+                val accessory = if (which == 0) FaceEffectTracker.Accessory.GOGGLES else FaceEffectTracker.Accessory.SKULL_MASK
+                applyTrackedFaceEffect(accessory)
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -7696,97 +7666,117 @@ class VideoEditingActivity : AppCompatActivity() {
     }
 
     private fun showPixabayExploreDialog() {
-        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 4) }
-        val query = TextInputEditText(this).apply {
-            hint = "Search images or videos"
-            setSingleLine(true)
-            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        val sheet = BottomSheetDialog(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16.dpToPx(), 16.dpToPx(), 16.dpToPx(), 12.dpToPx())
+            background = getDrawable(R.drawable.floating_panel_background)
         }
-        layout.addView(query)
-        val group = com.google.android.material.chip.ChipGroup(this).apply { isSingleSelection = true; isSelectionRequired = true }
-        val imagesChip = com.google.android.material.chip.Chip(this).apply { text = "Images"; isCheckable = true; isChecked = true }
-        val videosChip = com.google.android.material.chip.Chip(this).apply { text = "Videos"; isCheckable = true }
-        val musicChip = com.google.android.material.chip.Chip(this).apply { text = "Music & SFX"; isCheckable = true }
-        group.addView(imagesChip); group.addView(videosChip); group.addView(musicChip)
-        layout.addView(group)
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Explore Pixabay")
-            .setMessage("Search results include creator attribution. Images and videos use the Pixabay API; music and sound effects open Pixabay’s library because its API does not provide audio search.")
-            .setView(layout)
-            .setPositiveButton("Search", null)
-            .setNegativeButton("Cancel", null)
-            .create().also { dialog ->
-                dialog.setOnShowListener {
-                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val q = query.text?.toString()?.trim().orEmpty()
-                        if (musicChip.isChecked) {
-                            val path = if (q.isBlank()) "music/" else "music/search/" + android.net.Uri.encode(q) + "/"
-                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
-                                .setTitle("Review the music licence")
-                                .setMessage("Check the track's Pixabay licence and any usage restrictions before downloading or adding it. Mhirex cannot grant copyright clearance; keep the source page with your project records.")
-                                .setPositiveButton("Open Pixabay Music") { _, _ ->
-                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/$path"))) }
-                                    dialog.dismiss()
-                                }
-                                .setNegativeButton("Cancel", null)
-                                .show()
-                        } else if (q.isBlank()) {
-                            query.error = "Enter a search term"
-                        } else {
-                            dialog.dismiss()
-                            searchPixabay(q, if (videosChip.isChecked) "videos" else "images")
-                        }
-                    }
-                }
-                dialog.show()
-            }
-    }
+        val title = TextView(this).apply {
+            text = "Pixabay library"
+            textSize = 21f
+            setTextColor(getColor(R.color.textColor))
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        }
+        root.addView(title)
+        val subtitle = TextView(this).apply {
+            text = "Browse popular media or search. Tap a preview to add it to the timeline."
+            textSize = 12f
+            setTextColor(getColor(R.color.toolTextInactive))
+            setPadding(0, 3.dpToPx(), 0, 10.dpToPx())
+        }
+        root.addView(subtitle)
 
-    private fun searchPixabay(query: String, mediaType: String) {
-        showLoading("Searching Pixabay…")
-        lifecycleScope.launch {
-            try {
-                val hits = PixabayMediaCatalog.search(this@VideoEditingActivity, query, mediaType)
-                if (hits.isEmpty()) {
-                    Toast.makeText(this@VideoEditingActivity, "No Pixabay results found.", Toast.LENGTH_SHORT).show()
-                } else {
-                    val entries = hits.map { "${it.tags}\nBy ${it.creator} · Pixabay" }.toTypedArray()
-                    MaterialAlertDialogBuilder(this@VideoEditingActivity)
-                        .setTitle("Pixabay ${mediaType} · ${hits.size} results")
-                    .setItems(entries) { _, which ->
-                        val hit = hits[which]
-                        if (mediaType == "videos") {
-                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
-                                .setTitle("Check rights before adding")
-                                .setMessage("Before adding this video, review the Pixabay source page and its current licence. Confirm that the licence and any other rights let you use it in this project. Mhirex cannot grant copyright clearance.")
-                                .setPositiveButton("I have the rights — add video") { _, _ -> downloadAndAddPixabayVideo(hit) }
-                                .setNeutralButton("Review source") { _, _ ->
-                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.pageUrl))) }
-                                }
-                                .setNegativeButton("Cancel", null)
-                                .show()
-                        } else {
-                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
-                                .setTitle("Review image licence")
-                                .setMessage("Images are not hotlinked into your project. Review the Pixabay source and licence, download the image if you have rights to use it, then import the local file into Mhirex.")
-                                .setPositiveButton("Open source page") { _, _ ->
-                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.pageUrl))) }
-                                }
-                                .setNegativeButton("Cancel", null)
-                                .show()
-                        }
-                    }
-                        .setPositiveButton("Search again") { _, _ -> showPixabayExploreDialog() }
-                        .setNegativeButton("Done", null)
-                        .show()
+        val searchRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        val query = TextInputEditText(this).apply {
+            hint = "Search (optional)"
+            setSingleLine(true)
+            imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+            setTextColor(getColor(R.color.textColor))
+        }
+        searchRow.addView(query, LinearLayout.LayoutParams(0, 50.dpToPx(), 1f))
+        val searchButton = com.google.android.material.button.MaterialButton(this).apply {
+            text = "Search"
+            isAllCaps = false
+        }
+        searchRow.addView(searchButton)
+        root.addView(searchRow)
+
+        val chipGroup = com.google.android.material.chip.ChipGroup(this).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+            setPadding(0, 4.dpToPx(), 0, 6.dpToPx())
+        }
+        fun makeChip(label: String, selected: Boolean = false) = com.google.android.material.chip.Chip(this).apply {
+            text = label
+            isCheckable = true
+            isChecked = selected
+        }
+        val imagesChip = makeChip("Images", true)
+        val videosChip = makeChip("Videos")
+        val musicChip = makeChip("Music")
+        val effectsChip = makeChip("Sound FX")
+        listOf(imagesChip, videosChip, musicChip, effectsChip).forEach(chipGroup::addView)
+        root.addView(chipGroup)
+
+        val status = TextView(this).apply {
+            textSize = 12f
+            setTextColor(getColor(R.color.toolTextInactive))
+            setPadding(2.dpToPx(), 0, 0, 4.dpToPx())
+        }
+        root.addView(status)
+        val results = RecyclerView(this).apply {
+            layoutManager = androidx.recyclerview.widget.GridLayoutManager(this@VideoEditingActivity, 2)
+            itemAnimator = null
+        }
+        root.addView(results, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+
+        var mediaType = "images"
+        val adapter = PixabayMediaAdapter(
+            onAdd = { hit ->
+                sheet.dismiss()
+                if (mediaType == "videos") downloadAndAddPixabayVideo(hit) else downloadAndAddPixabayImage(hit)
+            },
+            onSource = { hit -> runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.pageUrl))) } },
+        )
+        results.adapter = adapter
+
+        fun loadResults(searchTerm: String = query.text?.toString()?.trim().orEmpty()) {
+            status.text = "Loading Pixabay ${mediaType}…"
+            lifecycleScope.launch {
+                try {
+                    val hits = PixabayMediaCatalog.search(this@VideoEditingActivity, searchTerm, mediaType)
+                    adapter.submitList(hits)
+                    status.text = if (hits.isEmpty()) "No results found. Try a different search." else "${hits.size} results · Pixabay · Tap Add to place on the timeline"
+                } catch (error: Exception) {
+                    Log.w(TAG, "Pixabay browse failed", error)
+                    status.text = error.message ?: "Could not load Pixabay media. Try again."
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "Pixabay search failed", e)
-                Toast.makeText(this@VideoEditingActivity, "Pixabay search failed. Check your connection and API rate limit.", Toast.LENGTH_LONG).show()
-            } finally {
-                hideLoading()
             }
         }
+
+        searchButton.setOnClickListener { loadResults() }
+        query.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                loadResults()
+                true
+            } else false
+        }
+        imagesChip.setOnClickListener { mediaType = "images"; loadResults("") }
+        videosChip.setOnClickListener { mediaType = "videos"; loadResults("") }
+        musicChip.setOnClickListener {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/music/"))) }
+        }
+        effectsChip.setOnClickListener {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/sound-effects/"))) }
+        }
+
+        sheet.setContentView(root)
+        sheet.show()
+        sheet.behavior.peekHeight = resources.displayMetrics.heightPixels * 4 / 5
+        sheet.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        loadResults("")
     }
 
     private fun downloadAndAddPixabayVideo(hit: com.mhirex.editor.services.PixabayMediaHit) {
@@ -7852,7 +7842,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 viewModel.addMergeOperation(listOf(EditOperation.MergeItem(mediaUri, durationMs)))
                 val creditStart = oldDuration + (durationMs - 3000L).coerceAtLeast(0L)
                 viewModel.addTextOperation(
-                    text = "Pixabay video by ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)} - licence checked by user",
+                    text = "Pixabay video by ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)}",
                     fontSize = 20,
                     position = "Bottom Center",
                     color = "#FFFFFF",
@@ -7878,27 +7868,50 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSpotifyLinkDialog() {
-        val input = TextInputEditText(this).apply {
-            hint = "https://open.spotify.com/..."
-            setSingleLine(true)
+    private fun downloadAndAddPixabayImage(hit: com.mhirex.editor.services.PixabayMediaHit) {
+        val source = hit.downloadUrl
+        if (source.isNullOrBlank() || hit.id <= 0L || !source.startsWith("https://pixabay.com/get/")) {
+            Toast.makeText(this, "This Pixabay result has no downloadable image.", Toast.LENGTH_SHORT).show()
+            return
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle("Open a Spotify track")
-            .setMessage("This opens Spotify. Import a separate audio file only if you have permission to use it in your video.")
-            .setView(input)
-            .setPositiveButton("Open") { _, _ ->
-                val uri = runCatching { Uri.parse(input.text?.toString()?.trim().orEmpty()) }.getOrNull()
-                val host = uri?.host?.lowercase(Locale.ROOT).orEmpty()
-                if (uri == null || uri.scheme != "https" || !(host == "spotify.com" || host.endsWith(".spotify.com"))) {
-                    Toast.makeText(this, "Enter a valid Spotify link.", Toast.LENGTH_SHORT).show()
-                } else {
-                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-                        .onFailure { Toast.makeText(this, "Could not open Spotify.", Toast.LENGTH_SHORT).show() }
+        showLoading("Adding Pixabay image…", "Downloading the selected image to this device")
+        lifecycleScope.launch {
+            try {
+                val file = withContext(Dispatchers.IO) {
+                    val directory = File(filesDir, "pixabay-media").apply { mkdirs() }
+                    val target = File(directory, "pixabay-image-${hit.id}.jpg")
+                    if (target.exists() && target.length() > 0L) return@withContext target
+                    val connection = (java.net.URL(source).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
+                    }
+                    try {
+                        if (connection.responseCode !in 200..299) throw IllegalStateException("Image download failed")
+                        if (connection.contentLengthLong > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
+                        connection.inputStream.use { input -> target.outputStream().buffered().use { output ->
+                            val buffer = ByteArray(64 * 1024); var total = 0L
+                            while (true) {
+                                val count = input.read(buffer); if (count < 0) break; total += count
+                                if (total > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
+                                output.write(buffer, 0, count)
+                            }
+                        } }
+                    } finally { connection.disconnect() }
+                    if (target.length() <= 0L) throw IllegalStateException("Image download was incomplete")
+                    target
                 }
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+                val duration = getTotalSequenceDuration().coerceAtLeast(1000L)
+                viewModel.addImageOverlayOperation(Uri.fromFile(file), 0.12f, 0.12f, 0.76f, 0.76f, 0f, 0L, duration)
+                viewModel.addTextOperation(
+                    text = "Photo: Pixabay / ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)}",
+                    fontSize = 16, position = "Bottom Center", color = "#FFFFFF",
+                    startTimeMs = 0L, endTimeMs = duration
+                )
+                viewModel.project.value?.let { renderTracks(it) }
+                Toast.makeText(this@VideoEditingActivity, "Image added to the timeline.", Toast.LENGTH_SHORT).show()
+            } catch (error: Exception) {
+                Toast.makeText(this@VideoEditingActivity, error.message ?: "Could not add Pixabay image.", Toast.LENGTH_LONG).show()
+            } finally { hideLoading() }
+        }
     }
 
     private fun applyBirthdayTemplate() {
@@ -7916,8 +7929,20 @@ class VideoEditingActivity : AppCompatActivity() {
             startTimeMs = 0L,
             endTimeMs = duration
         )
+        val birthdayFrame = createBirthdayFrameAsset()
+        viewModel.addImageOverlayOperation(
+            imageUri = Uri.fromFile(birthdayFrame),
+            relativeX = 0f,
+            relativeY = 0f,
+            relativeWidth = 1f,
+            relativeHeight = 1f,
+            rotationAngle = 0f,
+            startTimeMs = 0L,
+            endTimeMs = duration,
+            fileDurationMs = duration
+        )
         viewModel.addTextOperation(
-            text = "Music: Mhirex synth rendition. Confirm local song rights before sharing.",
+            text = "Happy Birthday · Mhirex melody",
             fontSize = 20,
             position = "Bottom Center",
             color = "#FFFFFF",
@@ -7943,6 +7968,49 @@ class VideoEditingActivity : AppCompatActivity() {
             fadeOutDurationMs = 300L
         )
         viewModel.project.value?.let { renderTracks(it) }
+    }
+
+    private fun createBirthdayFrameAsset(): File {
+        val directory = File(filesDir, "template-assets").apply { mkdirs() }
+        val file = File(directory, "birthday-frame.png")
+        if (file.exists() && file.length() > 0L) return file
+        val bitmap = android.graphics.Bitmap.createBitmap(720, 1280, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        paint.style = android.graphics.Paint.Style.STROKE
+        paint.strokeWidth = 14f
+        paint.color = android.graphics.Color.rgb(255, 209, 92)
+        canvas.drawRoundRect(18f, 18f, 702f, 1262f, 60f, 60f, paint)
+        paint.strokeWidth = 5f
+        paint.color = android.graphics.Color.rgb(255, 113, 174)
+        canvas.drawRoundRect(38f, 38f, 682f, 1242f, 48f, 48f, paint)
+        paint.style = android.graphics.Paint.Style.FILL
+        val balloonColors = intArrayOf(
+            android.graphics.Color.rgb(248, 84, 151),
+            android.graphics.Color.rgb(54, 207, 230),
+            android.graphics.Color.rgb(255, 194, 72),
+            android.graphics.Color.rgb(174, 117, 255)
+        )
+        val positions = listOf(90f to 120f, 190f to 75f, 530f to 95f, 630f to 145f, 115f to 1090f, 605f to 1120f)
+        positions.forEachIndexed { index, (x, y) ->
+            paint.color = balloonColors[index % balloonColors.size]
+            canvas.drawOval(x - 34f, y - 46f, x + 34f, y + 42f, paint)
+            val string = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.argb(190, 255, 255, 255); strokeWidth = 3f; style = android.graphics.Paint.Style.STROKE
+            }
+            canvas.drawLine(x, y + 40f, x + (if (index % 2 == 0) 18f else -18f), y + 118f, string)
+        }
+        paint.color = android.graphics.Color.rgb(255, 226, 151)
+        paint.textAlign = android.graphics.Paint.Align.CENTER
+        paint.textSize = 42f
+        paint.typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.BOLD)
+        canvas.drawText("✦", 150f, 285f, paint)
+        canvas.drawText("✦", 570f, 300f, paint)
+        canvas.drawText("✦", 92f, 910f, paint)
+        canvas.drawText("✦", 625f, 885f, paint)
+        file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        return file
     }
 
     private fun setMotionScrubEnabled(enabled: Boolean) {

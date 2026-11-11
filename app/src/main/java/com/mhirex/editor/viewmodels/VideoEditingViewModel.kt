@@ -241,6 +241,11 @@ class VideoEditingViewModel : ViewModel() {
 
     /** Build a crop filter expression for an aspect ratio. */
     private fun buildCropFilterExpr(op: EditOperation.Crop): String? {
+        if (op.aspectRatio == "Custom" && op.customWidth > 0 && op.customHeight > 0) {
+            val ratioW = op.customWidth
+            val ratioH = op.customHeight
+            return "crop='trunc(min(iw\\,ih*$ratioW/$ratioH)/2)*2':'trunc(min(ih\\,iw*$ratioH/$ratioW)/2)*2',setsar=1"
+        }
         val hasCustomBounds = op.aspectRatio == "Custom" || op.xFraction > 0f || op.yFraction > 0f || op.wFraction < 1f || op.hFraction < 1f
         if (hasCustomBounds) {
             val w = String.format(java.util.Locale.US, "trunc(iw*%.4f/2)*2", op.wFraction)

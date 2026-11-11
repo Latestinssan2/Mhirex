@@ -63,6 +63,8 @@ sealed class EditOperation : Serializable {
         val yFraction: Float = 0f,
         val wFraction: Float = 1f,
         val hFraction: Float = 1f,
+        val customWidth: Int = 0,
+        val customHeight: Int = 0,
         val id: String = System.nanoTime().toString()
     ) : EditOperation() {
         init {

@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
   const type = String(req.query?.type || "images").toLowerCase();
   const query = String(req.query?.q || "").trim().slice(0, 100);
-  if (!(["images", "videos"].includes(type)) || !query) {
+  if (!(["images", "videos"].includes(type))) {
     res.statusCode = 400;
     res.setHeader("Cache-Control", "no-store");
     res.end(JSON.stringify({ ok: false, error: "Choose images or videos and enter a search term." }));
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     const endpoint = type === "videos" ? "https://pixabay.com/api/videos/" : "https://pixabay.com/api/";
     const upstreamUrl = new URL(endpoint);
     upstreamUrl.searchParams.set("key", apiKey);
-    upstreamUrl.searchParams.set("q", query);
+    if (query) upstreamUrl.searchParams.set("q", query);
     upstreamUrl.searchParams.set("per_page", "20");
     upstreamUrl.searchParams.set("safesearch", "true");
     if (type === "images") {
@@ -60,8 +60,9 @@ export default async function handler(req, res) {
       pageURL: typeof hit.pageURL === "string" ? hit.pageURL : "",
       tags: typeof hit.tags === "string" ? hit.tags.slice(0, 140) : "Pixabay media",
       user: typeof hit.user === "string" ? hit.user.slice(0, 80) : "Pixabay contributor",
+      previewURL: typeof hit.previewURL === "string" ? hit.previewURL : "",
       webformatURL: typeof hit.webformatURL === "string" ? hit.webformatURL : "",
-      videos: type === "videos" ? { medium: { url: hit.videos?.medium?.url || "" } } : undefined,
+      videos: type === "videos" ? { medium: { url: hit.videos?.medium?.url || "", thumbnail: hit.videos?.medium?.thumbnail || "" } } : undefined,
     })).filter((hit) => hit.id > 0 && hit.pageURL.startsWith("https://pixabay.com/"));
 
     res.statusCode = 200;

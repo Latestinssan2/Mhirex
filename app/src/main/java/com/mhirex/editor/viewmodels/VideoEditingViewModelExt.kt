@@ -48,6 +48,13 @@ fun VideoEditingViewModel.addCropOperation(
     ))
 }
 
+fun VideoEditingViewModel.setCanvasFormat(width: Int, height: Int) {
+    executeCommand(ReplaceUniqueOperationCommand(
+        EditOperation.Crop("Custom", customWidth = width, customHeight = height),
+        "Choose canvas format"
+    ))
+}
+
 fun VideoEditingViewModel.updateCanvasBackgroundOperation(
     type: EditOperation.CanvasBackground.BackgroundType, colorHex: String = "#000000",
     imageUri: Uri? = null, blurRadius: Int = 20

@@ -39,8 +39,8 @@ android {
         // advance by MORE than the largest offset for every ABI to be offered the upgrade.
         // v1.0-beta11 shipped base 15, i.e. per-ABI 15/16/17. Base 16 gives 16/17/18 so Android
         // accepts this as an upgrade for every ABI variant.
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 16
-        versionName "1.0-beta12"
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 17
+        versionName "1.0-beta13"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
