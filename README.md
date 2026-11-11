@@ -74,15 +74,12 @@
 
 <br/>
 
-> **Status: active development.** Mhirex is being rebuilt on top of its LibreCuts foundation. The
-> core editing tools listed below work today; the multi-track architecture, instant GPU preview,
-> beat-sync workflow, and creator-focused features are being built and shipped incrementally.
-> Treat releases as beta software, and please [open an issue](https://github.com/Preet3627/Mhirex/issues)
-> when something breaks. See [What's next](#-whats-next) for the roadmap.
+> **Stable release: v1.0.0.** Please [open an issue](https://github.com/Latestinssan2/Mhirex/issues)
+> if something breaks. See [What's next](#-whats-next) for the roadmap.
 
 **Mhirex** is a free, open-source video editor for Android that prioritizes simplicity, efficiency, and privacy. Built for seamless performance, it empowers creators to easily select, edit, and export watermark-free videos locally on their device.
 
-**Project origin.** Mhirex started as a personal tool, built by **Preet Patel** for [@_fivetriple.8_](https://www.instagram.com/_fivetriple.8_/), who wanted to cut videos on his phone without installing anything from a store. It is now maintained as a public project, with [@il__mehul_patel__li](https://www.instagram.com/il__mehul_patel__li/) also contributing. Mhirex is based on [LibreCuts](https://github.com/tharunbirla/LibreCuts) by Tharun Birla and retains the upstream MIT license and full attribution — see [`NOTICE`](NOTICE) and [`ASSETS.md`](ASSETS.md) for third-party and release notices.
+**Project origin.** Mhirex started as a personal tool, built by **Preet Patel** for [@_fivetriple.8_](https://www.instagram.com/_fivetriple.8_/), who wanted to cut videos on his phone without installing anything from a store. It is now maintained as a public project, with [@il__mehul_patel__li](https://www.instagram.com/il__mehul_patel__li/) also contributing. Mhirex is based on [LibreCuts](https://github.com/tharunbirla/LibreCuts) by Tharun Birla. Mhirex is licensed under GPL-3.0; the upstream MIT notice remains in [`LICENSES/UPSTREAM-MIT.txt`](LICENSES/UPSTREAM-MIT.txt). See [`NOTICE`](NOTICE), [`ASSETS.md`](ASSETS.md), and [`docs/THIRD_PARTY_NOTICES.md`](docs/THIRD_PARTY_NOTICES.md) for attribution and source details.
 
 ---
 
@@ -259,4 +256,4 @@ If that matters to you, the campaign is documented at [keepandroidopen.org](http
 
 ## 📝 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Mhirex is licensed under GNU GPL version 3.0. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the [third-party source offer](docs/FFMPEG_SOURCE_OFFER.md). The original LibreCuts MIT notice is preserved in [`LICENSES/UPSTREAM-MIT.txt`](LICENSES/UPSTREAM-MIT.txt).

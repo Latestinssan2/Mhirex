@@ -319,14 +319,12 @@ class DraggableImageOverlayView @JvmOverloads constructor(
         originalBitmapForChroma = null
         currentChromaColor = op.chromaKeyColor
         currentChromaSimilarity = op.chromaKeySimilarity
-        val videoRatio = if (videoHeight > 0) videoWidth.toFloat() / videoHeight else 1.0f
-        
         val trueAspect = getMediaAspectRatio(op.imageUri)
         imageAspectRatio = trueAspect
         relativeX = op.relativeX
         relativeY = op.relativeY
         relativeWidth = op.relativeWidth
-        relativeHeight = relativeWidth * videoRatio / imageAspectRatio
+        relativeHeight = op.relativeHeight
         rotationAngle = op.rotationAngle
         opacity = op.opacity
         isMirrored = op.isMirrored

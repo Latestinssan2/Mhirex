@@ -28,7 +28,7 @@
                 android:layout_height="wrap_content"
                 android:text="Roboto Regular"
                 android:textColor="#FFFFFF"
-                android:textSize="15sp"
+                android:textSize="16sp"
                 android:fontFamily="sans-serif-medium" />
 
             <TextView
@@ -51,10 +51,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="Aa The quick brown fox 123"
+            android:text="Aa Bb Cc • 123"
             android:textColor="#D1C4E9"
-            android:textSize="16sp"
-            android:maxLines="1"
+            android:textSize="20sp"
+            android:maxLines="2"
             android:ellipsize="end" />
     </LinearLayout>
 

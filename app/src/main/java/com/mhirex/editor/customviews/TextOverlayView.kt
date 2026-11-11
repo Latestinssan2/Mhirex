@@ -26,6 +26,8 @@ class TextOverlayView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    init { isClickable = true }
+
     private val paint = Paint().apply {
         color = Color.WHITE
         textSize = 48f
@@ -59,6 +61,8 @@ class TextOverlayView @JvmOverloads constructor(
             invalidate()
         }
     var onSubtitlePositionChanged: ((relativeX: Float, relativeY: Float) -> Unit)? = null
+    var onOperationTapped: ((String) -> Unit)? = null
+    private var touchedTextOperationId: String? = null
 
     private var overlayOperations: List<EditOperation> = emptyList()
     private val bitmapCache = mutableMapOf<String, Bitmap>()
@@ -544,7 +548,24 @@ class TextOverlayView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
         if (!isSubtitlesEditingActive || subtitleOperation == null) {
-            return super.onTouchEvent(event)
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    touchedTextOperationId = findTextOperationAt(event.x, event.y)
+                    return touchedTextOperationId != null
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    val id = touchedTextOperationId
+                    touchedTextOperationId = null
+                    if (id != null) {
+                        performClick()
+                        onOperationTapped?.invoke(id)
+                        return true
+                    }
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> touchedTextOperationId = null
+                else -> if (touchedTextOperationId != null) return true
+            }
+            return false
         }
 
 
@@ -581,6 +602,39 @@ class TextOverlayView @JvmOverloads constructor(
             }
         }
         return true
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
+    private fun findTextOperationAt(touchX: Float, touchY: Float): String? {
+        val videoRect = getVideoRect()
+        val scale = if (videoHeight > 0) videoRect.height() / videoHeight.toFloat() else 1f
+        for (op in overlayOperations.asReversed().filterIsInstance<EditOperation.AddText>()) {
+            val start = op.startTimeMs ?: 0L
+            if (op.id == hiddenOperationId || currentPositionMs < start || currentPositionMs > (op.endTimeMs ?: Long.MAX_VALUE)) continue
+            paint.textSize = op.fontSize * scale
+            paint.typeface = try {
+                op.fontPath?.let { android.graphics.Typeface.createFromFile(it) } ?: android.graphics.Typeface.DEFAULT
+            } catch (_: Exception) { android.graphics.Typeface.DEFAULT }
+            val lines = op.text.split("\n")
+            val textWidth = lines.maxOfOrNull { paint.measureText(it) } ?: 0f
+            val lineHeight = paint.descent() - paint.ascent() + op.lineSpacing * scale
+            val textHeight = lineHeight * lines.size
+            val relativeTimeMs = currentPositionMs - start
+            val position = if (op.positionKeyframes.isNotEmpty()) {
+                interpolateKeyframePosition(op.positionKeyframes, relativeTimeMs, op.relativeX ?: 0.5f, op.relativeY ?: 0.5f)
+            } else op.relativeX to op.relativeY
+            val centerX = videoRect.left + (position.first ?: 0.5f) * videoRect.width()
+            val centerY = videoRect.top + (position.second ?: 0.5f) * videoRect.height()
+            val padding = 24f * resources.displayMetrics.density
+            if (touchX >= centerX - textWidth / 2f - padding && touchX <= centerX + textWidth / 2f + padding &&
+                touchY >= centerY - textHeight / 2f - padding && touchY <= centerY + textHeight / 2f + padding
+            ) return op.id
+        }
+        return null
     }
 
     private fun wrapTextForCanvas(text: String, paint: Paint, maxWidth: Float): List<String> {

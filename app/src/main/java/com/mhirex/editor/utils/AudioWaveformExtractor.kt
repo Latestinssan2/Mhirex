@@ -19,6 +19,7 @@ object AudioWaveformExtractor {
      */
     suspend fun extractWaveform(context: Context, videoPath: String, targetSamples: Int = 300): FloatArray? = withContext(Dispatchers.IO) {
         val pcmFile = File(context.cacheDir, "temp_waveform_${System.currentTimeMillis()}.pcm")
+        com.mhirex.editor.services.FFmpegExecutionCoordinator.semaphore.acquire()
         
         try {
             // Extract audio as 16-bit PCM at a low sample rate (8000Hz is plenty for visualization)
@@ -82,6 +83,7 @@ object AudioWaveformExtractor {
             if (pcmFile.exists()) {
                 pcmFile.delete()
             }
+            com.mhirex.editor.services.FFmpegExecutionCoordinator.semaphore.release()
         }
     }
 }

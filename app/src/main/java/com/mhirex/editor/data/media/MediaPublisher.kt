@@ -54,7 +54,7 @@ object MediaPublisher {
 
         val topLevelDirectory: String
             get() = when (this) {
-                VIDEO -> Environment.DIRECTORY_MOVIES
+                VIDEO -> Environment.DIRECTORY_DCIM
                 AUDIO -> Environment.DIRECTORY_MUSIC
                 IMAGE -> Environment.DIRECTORY_PICTURES
             }

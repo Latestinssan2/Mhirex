@@ -82,7 +82,7 @@
     <string name="str_settings">Pengaturan</string>
     <string name="str_general">Umum</string>
     <string name="str_export_folder">Folder Ekspor</string>
-    <string name="str_default_movies_mhirex">Default (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Default (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Cek Pembaruan</string>
     <string name="str_manually_check_for_the_latest">Cek manual versi terbaru</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

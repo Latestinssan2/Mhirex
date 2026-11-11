@@ -180,8 +180,8 @@ Opening a project containing an effect this build does not recognise **silently 
 
 ### 0.7 Licensing and dependency risk
 
-**L1 — GPL-3.0 binary inside an MIT-licensed app.**
-The app declares MIT but ships `com.antonkarpenko:ffmpeg-kit-full-gpl:2.1.0`. The `-gpl` bundle enables x264, x265, vid.stab, libass and others, which makes the **entire distributed binary subject to GPL-3.0**. GPL requires corresponding source availability for the combined work. LibreCuts does not publish a corresponding-source offer, nor does the About screen state that the binary is GPL. This is a pre-existing, real compliance gap that Mhirex must resolve rather than inherit silently.
+**L1 — GPL-3.0 binary inside an MIT-licensed app — RESOLVED for v1.0.0.**
+The app bundles `com.antonkarpenko:ffmpeg-kit-full-gpl:2.1.0`. Mhirex now distributes under GPL-3.0, retains the upstream LibreCuts MIT notice in `LICENSES/UPSTREAM-MIT.txt`, includes third-party notices and source references, exposes the FFmpeg license through AboutLibraries, and publishes a corresponding-source offer in `docs/FFMPEG_SOURCE_OFFER.md`. Maintainers must fulfill requests for any missing exact build inputs during the offer period.
 
 **L2 — ffmpeg-kit is retired.**
 `arthenica/ffmpeg-kit` was **archived 2026-07-02**. The successor "FFmpegKitNext" is source-only. The `antonkarpenko` fork is a community fork of a dead project: it receives no upstream FFmpeg security patches, and FFmpeg has a steady CVE stream. Dependency risk: **high**.

@@ -82,7 +82,7 @@
     <string name="str_settings">Impostazioni</string>
     <string name="str_general">Generale</string>
     <string name="str_export_folder">Cartella di Esportazione</string>
-    <string name="str_default_movies_mhirex">Predefinita (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Predefinita (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Controlla Aggiornamenti</string>
     <string name="str_manually_check_for_the_latest">Verifica manualmente l\'ultima versione</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

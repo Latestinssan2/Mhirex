@@ -37,10 +37,9 @@ android {
         targetSdk 34
         // Per-ABI version codes are base + 0/1/2 (armeabi-v7a/arm64-v8a/x86_64), so the base has to
         // advance by MORE than the largest offset for every ABI to be offered the upgrade.
-        // v1.0-beta14 shipped base 18, i.e. per-ABI 18/19/20. Base 19 gives 19/20/21 so Android
-        // accepts this as an upgrade for every ABI variant.
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 19
-        versionName "1.0-beta15"
+        // v1.0-beta15 shipped base 19, i.e. per-ABI 19/20/21. Base 22 advances every ABI past it.
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 22
+        versionName "1.0.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -147,4 +146,5 @@ dependencies {
     androidTestImplementation libs.androidx.espresso.core
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'com.google.mediapipe:tasks-vision:1.2.2'
+    implementation 'com.google.mlkit:segmentation-selfie:16.0.0-beta6'
 }

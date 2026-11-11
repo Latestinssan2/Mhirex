@@ -112,7 +112,7 @@
     <string name="str_9_16">9:16</string>
     <string name="str_1_1">1:1</string>
     <string name="str_voice_over">Sprachaufnahme</string>
-    <string name="str_default_movies_mhirex">Standard (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Standard (DCIM/Mhirex)</string>
     <string name="toast_microphone_permission_required">Mikrofon-Berechtigung für Sprachaufnahme benötigt</string>
     <string name="toast_snapping_enabled">Einrasten ein</string>
     <string name="toast_snapping_disabled">Einrasten aus</string>

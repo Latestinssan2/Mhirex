@@ -82,7 +82,7 @@
     <string name="str_settings">સેટિંગ્સ</string>
     <string name="str_general">સામાન્ય</string>
     <string name="str_export_folder">નિયાત ફોલ્ડર</string>
-    <string name="str_default_movies_mhirex">ડિફૉલ્ટ (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">ડિફૉલ્ટ (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">અપડેટ માટે તપાસો</string>
     <string name="str_manually_check_for_the_latest">નવીનતમ વર્ઝન માટે જાતે તપાસો</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>
@@ -108,7 +108,7 @@
     <string name="str_about_open_github">નવી GitHub રિપોઝિટરી ખોલો</string>
     <string name="str_about_open_issues">નવી રિપોઝિટરીમાં બગ નોંધો</string>
     <string name="str_about_upstream_title">ઓપન-સોર્સ સાતત્ય</string>
-    <string name="str_about_upstream_body">Mhirex માં LibreCuts નું મૂળ MIT લાઇસન્સ, સ્રોત લગાતારતા અને પ્રોજેક્ટ ઇતિહાસ જાળવે છે.</string>
+    <string name="str_about_upstream_body">Mhirex GNU GPL v3.0 હેઠળ લાઇસન્સ ધરાવે છે. મૂળ LibreCuts MIT સૂચના પ્રોજેક્ટ લાઇસન્સ ફાઇલોમાં જાળવવામાં આવે છે.</string>
     <string name="str_onboarding_kicker">એક વિચારથી બનાવ્યું • ઉત્સાહથી બનાવેલું</string>
     <string name="str_onboarding_welcome_title">Mhirex પાછળના લોકોને મળો</string>
     <string name="str_onboarding_welcome_body">એક વ્યક્તિગત એપ, પહેલા વિચારથી છેલ્લા નિયાત સુધી દરેક વિગતની કાળજી સાથે બનાવવામાં આવી.</string>
@@ -121,7 +121,7 @@
     <string name="str_mhirex_is_open_source_help">Mhirex ઓપન-સોર્સ છે. GitHub પર પ્રોજેક્ટ સ્ટાર કરીને અથવા બગ નોંધીને અમને સુધારવામાં મદદ કરો.</string>
     <!-- MIT requires the original copyright notice in all copies. str_made_by_tharun_birla is
          retained verbatim in every locale; this is the additive Mhirex attribution. -->
-    <string name="str_mhirex_based_on">Tharun Birla ના LibreCuts પર આધારિત · MIT લાઇસન્સ</string>
+    <string name="str_mhirex_based_on">Tharun Birla ના LibreCuts પર આધારિત · GPL v3.0</string>
     <string name="str_star_on_github">GitHub પર સ્ટાર કરો</string>
     <string name="str_report_a_bug">બગ નોંધો</string>
     <string name="str_sponsor_project">પ્રોજેક્ટને સપોર્ટ કરો</string>

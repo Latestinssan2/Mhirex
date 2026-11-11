@@ -22,6 +22,8 @@ class ImageOverlayView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
+    init { isClickable = true }
+
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         isFilterBitmap = true
     }
@@ -54,6 +56,9 @@ class ImageOverlayView @JvmOverloads constructor(
             field = value
             invalidate()
         }
+
+    var onOperationTapped: ((String) -> Unit)? = null
+    private var touchedOperationId: String? = null
 
     fun setImageOperations(operations: List<EditOperation.AddImageOverlay>) {
         this.imageOperations = operations
@@ -301,10 +306,16 @@ class ImageOverlayView @JvmOverloads constructor(
             } else {
                 op.opacity
             }
+            val interpolatedRotation = if (op.rotationKeyframes.isNotEmpty()) {
+                interpolateKeyframes(op.rotationKeyframes, relativeTimeMs, op.rotationAngle)
+            } else {
+                op.rotationAngle
+            }
             val interpolatedOp = op.copy(
                 relativeX = interpolatedPos.first,
                 relativeY = interpolatedPos.second,
-                opacity = interpolatedOpacity
+                opacity = interpolatedOpacity,
+                rotationAngle = interpolatedRotation
             )
 
             if (isGif || isVideo) {
@@ -409,6 +420,50 @@ class ImageOverlayView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN -> {
+                val videoRect = getVideoRect()
+                touchedOperationId = imageOperations.asReversed().firstOrNull { op ->
+                    if (op.id == hiddenOperationId || currentPositionMs < (op.startTimeMs ?: 0L) ||
+                        currentPositionMs > (op.endTimeMs ?: Long.MAX_VALUE)) return@firstOrNull false
+                    val relativeTimeMs = currentPositionMs - (op.startTimeMs ?: 0L)
+                    val center = if (op.positionKeyframes.isNotEmpty()) {
+                        interpolateKeyframePosition(op.positionKeyframes, relativeTimeMs, op.relativeX, op.relativeY)
+                    } else op.relativeX to op.relativeY
+                    val rotation = interpolateKeyframes(op.rotationKeyframes, relativeTimeMs, op.rotationAngle)
+                    val centerX = videoRect.left + center.first * videoRect.width()
+                    val centerY = videoRect.top + center.second * videoRect.height()
+                    val dx = event.x - centerX
+                    val dy = event.y - centerY
+                    val radians = Math.toRadians(-rotation.toDouble())
+                    val localX = dx * kotlin.math.cos(radians).toFloat() - dy * kotlin.math.sin(radians).toFloat()
+                    val localY = dx * kotlin.math.sin(radians).toFloat() + dy * kotlin.math.cos(radians).toFloat()
+                    kotlin.math.abs(localX) <= op.relativeWidth * videoRect.width() / 2f &&
+                        kotlin.math.abs(localY) <= op.relativeHeight * videoRect.height() / 2f
+                }?.id
+                return touchedOperationId != null
+            }
+            android.view.MotionEvent.ACTION_UP -> {
+                val id = touchedOperationId
+                touchedOperationId = null
+                if (id != null) {
+                    performClick()
+                    onOperationTapped?.invoke(id)
+                    return true
+                }
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> touchedOperationId = null
+            else -> if (touchedOperationId != null) return true
+        }
+        return touchedOperationId != null
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
     
     private fun drawBitmapOp(canvas: Canvas, bitmap: Bitmap, op: EditOperation.AddImageOverlay, videoRect: RectF) {

@@ -187,6 +187,7 @@ class VideoEditingActivity : AppCompatActivity() {
     private var activeExportRequestId: String? = null
     private var exportCancellationRequested = false
     private var projectSessionId: String? = null
+    private var autoSaveJob: Job? = null
     private val activeRenderJobs = java.util.concurrent.CopyOnWriteArraySet<Job>()
     private val activeTransformJobs = java.util.concurrent.CopyOnWriteArraySet<Job>()
     private var transformGeneration = 0L
@@ -479,6 +480,7 @@ class VideoEditingActivity : AppCompatActivity() {
         val btnImport = view.findViewById<Button>(R.id.btnImportFont)
         val rvFonts = view.findViewById<RecyclerView>(R.id.rvFonts)
         val tvEmpty = view.findViewById<TextView>(R.id.tvEmptyFonts)
+        val etSearch = view.findViewById<android.widget.EditText>(R.id.etFontSearch)
 
         btnClose?.setBounceClickListener {
             bottomSheet.dismiss()
@@ -486,8 +488,11 @@ class VideoEditingActivity : AppCompatActivity() {
 
         fun refreshFontList() {
             val allFonts = com.mhirex.editor.utils.FontManager.getAllFonts(this, fontFilePath)
-            if (allFonts.isEmpty()) {
+            val query = etSearch?.text?.toString()?.trim().orEmpty()
+            val filteredFonts = if (query.isBlank()) allFonts else allFonts.filter { it.name.contains(query, ignoreCase = true) }
+            if (filteredFonts.isEmpty()) {
                 tvEmpty?.visibility = View.VISIBLE
+                tvEmpty?.text = if (allFonts.isEmpty()) "No fonts found. Import a .ttf or .otf file." else "No fonts match ‘$query’."
                 rvFonts?.visibility = View.GONE
             } else {
                 tvEmpty?.visibility = View.GONE
@@ -496,7 +501,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 rvFonts?.layoutManager = LinearLayoutManager(this)
                 val currentPath = draggableTextOverlay?.currentFontPath
                 rvFonts?.adapter = FontManagerAdapter(
-                    fonts = allFonts,
+                    fonts = filteredFonts,
                     selectedPath = currentPath,
                     onSelect = { fontItem ->
                         onFontSelected?.invoke(fontItem)
@@ -535,6 +540,12 @@ class VideoEditingActivity : AppCompatActivity() {
             importFontLauncher.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "*/*"))
         }
 
+        etSearch?.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = refreshFontList()
+            override fun afterTextChanged(s: android.text.Editable?) = Unit
+        })
+
         refreshFontList()
         bottomSheet.show()
     }
@@ -562,7 +573,7 @@ class VideoEditingActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: FontViewHolder, position: Int) {
             val font = fonts[position]
             holder.tvName.text = font.name
-            holder.tvPreview.text = "Aa The quick brown fox 123"
+            holder.tvPreview.text = "Aa Bb Cc • 123"
             if (font.typeface != null) {
                 holder.tvPreview.typeface = font.typeface
             } else {
@@ -1060,6 +1071,7 @@ class VideoEditingActivity : AppCompatActivity() {
 
         textOverlayView = try {
             findViewById<com.mhirex.editor.customviews.TextOverlayView>(R.id.textOverlayView)?.also { overlay ->
+                overlay.onOperationTapped = { operationId -> viewModel.selectOperation(operationId) }
                 overlay.onSubtitlePositionChanged = { relX, relY ->
                     val project = viewModel.project.value
                     val subOp = project?.operations?.find { it is EditOperation.AddSubtitles } as? EditOperation.AddSubtitles
@@ -1074,7 +1086,9 @@ class VideoEditingActivity : AppCompatActivity() {
         }
 
         imageOverlayView = try {
-            findViewById(R.id.imageOverlayView)
+            findViewById<com.mhirex.editor.customviews.ImageOverlayView>(R.id.imageOverlayView)?.also { overlay ->
+                overlay.onOperationTapped = { operationId -> viewModel.selectOperation(operationId) }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "ImageOverlayView not found in layout: ${e.message}")
             null
@@ -1523,6 +1537,9 @@ class VideoEditingActivity : AppCompatActivity() {
                 toolbar.findViewById<View>(R.id.btnImageChromaKey)?.setBounceClickListener {
                     showChromaKeyDialog()
                 }
+                toolbar.findViewById<View>(R.id.btnImageRemoveBackground)?.setBounceClickListener {
+                    removeSelectedImageBackground()
+                }
                 toolbar.findViewById<View>(R.id.btnImageLoop)?.setBounceClickListener {
                     val selectedId = viewModel.selectedOperationId.value
                     val op = viewModel.project.value?.operations?.find { (it as? EditOperation.AddImageOverlay)?.id == selectedId } as? EditOperation.AddImageOverlay
@@ -1544,9 +1561,21 @@ class VideoEditingActivity : AppCompatActivity() {
 
                 val slider = toolbar.findViewById<Slider>(R.id.imageRotationSlider)
                 val tvValue = toolbar.findViewById<TextView>(R.id.tvImageRotationValue)
-                slider?.addOnChangeListener { _, value, _ ->
+                slider?.addOnChangeListener { _, value, fromUser ->
                     tvValue?.text = "${value.toInt()}°"
                     draggableImageOverlay?.setRotationAngle(value)
+                    if (fromUser && isKeyframeEditingMode && activeKeyframeProperty == "Rotation") {
+                        val id = viewModel.selectedOperationId.value
+                        val op = viewModel.project.value?.operations?.firstOrNull { it.id == id } as? EditOperation.AddImageOverlay
+                        if (op != null) {
+                            val relativeMs = (getGlobalPosition() - (op.startTimeMs ?: 0L)).coerceAtLeast(0L)
+                            val points = op.rotationKeyframes.toMutableList()
+                            val point = EditOperation.KeyframePoint(relativeMs, value)
+                            val idx = points.indexOfFirst { kotlin.math.abs(it.timeMs - relativeMs) < 150L }
+                            if (idx >= 0) points[idx] = point else points.add(point)
+                            viewModel.updateOperation(op.copy(rotationKeyframes = points))
+                        }
+                    }
                 }
 
                 toolbar.findViewById<View>(R.id.btnImageOpacity)?.setBounceClickListener {
@@ -2296,6 +2325,7 @@ class VideoEditingActivity : AppCompatActivity() {
             viewModel.project.collect { project ->
                 if (project != null) {
                     Log.d(TAG, "Project updated with ${project.getOperationCount()} operations")
+                    scheduleAutomaticProjectSave(project)
 
                     if (project.sourceUri.scheme == "file") {
                         val projectSourcePath = project.sourceUri.path
@@ -3672,39 +3702,98 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
-    private fun freezeFrameAtCurrentPosition(onCreated: ((Long) -> Unit)? = null) {
-        val index = selectedVideoIndex ?: return
+    private fun freezeFrameAtCurrentPosition(
+        shakeBackground: Boolean = false,
+        usePlayheadClip: Boolean = false,
+        onCreated: ((Long, Int) -> Unit)? = null,
+    ) {
         val sequenceItems = getSequenceItems()
+        val globalPos = getGlobalPosition()
+        val playheadIndex = if (usePlayheadClip) {
+            var clipStartMs = 0L
+            sequenceItems.indexOfFirst { item ->
+                val clipEndMs = clipStartMs + item.trimmedDurationMs
+                val containsPosition = globalPos >= clipStartMs && globalPos < clipEndMs
+                clipStartMs = clipEndMs
+                containsPosition
+            }.takeIf { it >= 0 }
+                ?: sequenceItems.lastIndex.takeIf { globalPos >= sequenceItems.sumOf { it.trimmedDurationMs } }
+        } else {
+            null
+        }
+        var fallbackClipStartMs = 0L
+        val fallbackPlayheadIndex = sequenceItems.indexOfFirst { item ->
+            val clipEndMs = fallbackClipStartMs + item.trimmedDurationMs
+            val containsPosition = globalPos >= fallbackClipStartMs && globalPos < clipEndMs
+            fallbackClipStartMs = clipEndMs
+            containsPosition
+        }.takeIf { it >= 0 }
+        // Timeline selection can be cleared when leaving another tool or after applying a
+        // template. In that case freeze the clip under the playhead instead of silently doing
+        // nothing when the user taps Freeze Frame.
+        val index = playheadIndex ?: selectedVideoIndex?.takeIf { it in sequenceItems.indices }
+            ?: fallbackPlayheadIndex
+            ?: sequenceItems.lastIndex.takeIf { globalPos >= sequenceItems.sumOf { it.trimmedDurationMs } }
+        if (sequenceItems.isEmpty() || index == null) {
+            Toast.makeText(this, "Move the playhead onto a video or image first.", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (index < 0 || index >= sequenceItems.size) return
         val item = sequenceItems[index]
 
         showLoading("Creating freeze frame...")
         isImportLoading = true
 
-        val globalPos = getGlobalPosition()
-
         lifecycleScope.launch {
-            val resultUri = withContext(Dispatchers.IO) {
+            val resultUri = runCatching { withContext(Dispatchers.IO) {
                 var bitmap: android.graphics.Bitmap? = null
-                val retriever = android.media.MediaMetadataRetriever()
-                try {
-                    retriever.setDataSource(this@VideoEditingActivity, item.uri)
-                    
-                    var globalStartMs = 0L
-                    for (i in 0 until index) {
-                        globalStartMs += sequenceItems[i].trimmedDurationMs
-                    }
-                    val relativePosMs = globalPos - globalStartMs
-                    val sourceTimeMs = item.trimStartMs + (relativePosMs * item.speed).toLong()
-                    val coercedSourceTimeMs = sourceTimeMs.coerceIn(item.trimStartMs, item.trimEndMs)
-
-                    bitmap = retriever.getFrameAtTime(coercedSourceTimeMs * 1000L, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to retrieve frame: ${e.message}", e)
-                } finally {
+                if (item.isImage || isImageUri(item.uri)) {
+                    val imagePath = getFilePathFromUri(item.uri)
+                        ?: throw java.io.IOException("Could not open the selected image for the freeze frame")
+                    bitmap = android.graphics.BitmapFactory.decodeFile(imagePath)
+                } else {
+                    val retriever = android.media.MediaMetadataRetriever()
                     try {
-                        retriever.release()
-                    } catch (e: Exception) {}
+                        val sourcePath = getFilePathFromUri(item.uri)
+                            ?: throw java.io.IOException("Could not open the selected clip for the freeze frame")
+                        if (!File(sourcePath).isFile || File(sourcePath).length() <= 0L) {
+                            throw java.io.IOException("The selected clip is missing or empty")
+                        }
+                        retriever.setDataSource(sourcePath)
+
+                        var globalStartMs = 0L
+                        for (i in 0 until index) {
+                            globalStartMs += sequenceItems[i].trimmedDurationMs
+                        }
+                        val relativePosMs = globalPos - globalStartMs
+                        val sourceTimeMs = item.trimStartMs + (relativePosMs * item.speed).toLong()
+                        val lastFrameTimeMs = (item.trimEndMs - 1L).coerceAtLeast(item.trimStartMs)
+                        val coercedSourceTimeMs = sourceTimeMs.coerceIn(item.trimStartMs, lastFrameTimeMs)
+                        val timeUs = coercedSourceTimeMs * 1000L
+
+                        // Some device decoders return null for OPTION_CLOSEST_SYNC even when
+                        // the video is readable. Retry the exact timestamp and clip start before
+                        // reporting a failed freeze-frame operation.
+                        bitmap = retriever.getFrameAtTime(
+                            timeUs,
+                            android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                        ) ?: retriever.getFrameAtTime(
+                            timeUs,
+                            android.media.MediaMetadataRetriever.OPTION_CLOSEST
+                        ) ?: retriever.getFrameAtTime(
+                            item.trimStartMs * 1000L,
+                            android.media.MediaMetadataRetriever.OPTION_CLOSEST
+                        )
+                        if (bitmap == null) {
+                            throw java.io.IOException("The device could not decode a frame from the selected clip")
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to retrieve frame: ${e.message}", e)
+                    } finally {
+                        try {
+                            retriever.release()
+                        } catch (e: Exception) {}
+                    }
                 }
 
                 if (bitmap == null) return@withContext null
@@ -3712,28 +3801,54 @@ class VideoEditingActivity : AppCompatActivity() {
                 val pngFile = File(cacheDir, "freeze_${System.nanoTime()}.png")
                 try {
                     java.io.FileOutputStream(pngFile).use { out ->
-                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                        check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)) {
+                            "Could not encode the selected video frame"
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to save temp PNG: ${e.message}", e)
                     return@withContext null
+                } finally {
+                    bitmap.recycle()
                 }
 
                 val mp4File = File(cacheDir, "freeze_vid_${System.nanoTime()}.mp4")
-                val cmd = "-y -loop 1 -i \"${pngFile.absolutePath}\" -c:v h264_mediacodec -t 3 -pix_fmt yuv420p -vf \"scale=trunc(iw/2)*2:trunc(ih/2)*2\" \"${mp4File.absolutePath}\""
-                val renderResult = ffmpegEngine.executeCommand(cmd)
+                // For the Death template, move the frozen scene behind its steady skull overlay.
+                val freezeFilter = if (shakeBackground) {
+                    // Bake the motion and monochrome into the freeze clip itself so they
+                    // remain visible in preview even before timeline filters refresh.
+                    "scale=iw*1.18:ih*1.18,crop=w=trunc(iw/1.18/2)*2:h=trunc(ih/1.18/2)*2:x='(iw-ow)/2+20*sin(t*48)':y='(ih-oh)/2+16*sin(t*41)',hue=s=0,fps=30,format=yuv420p"
+                } else {
+                    "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p"
+                }
+                val inputArgs = "-y -loop 1 -framerate 30 -i \"${pngFile.absolutePath}\" -t 3 -vf \"$freezeFilter\" -an -pix_fmt yuv420p"
+                val hardwareCommand = "$inputArgs -c:v h264_mediacodec -b:v 6M -movflags +faststart \"${mp4File.absolutePath}\""
+                var renderResult = ffmpegEngine.executeCommand(hardwareCommand)
+                if (renderResult !is com.mhirex.editor.services.FFmpegRenderEngine.RenderResult.Success) {
+                    val firstError = (renderResult as? com.mhirex.editor.services.FFmpegRenderEngine.RenderResult.Failure)?.error
+                    Log.w(TAG, "Hardware freeze-frame encoding failed; retrying with software H.264: ${firstError?.takeLast(1200)}")
+                    mp4File.delete()
+                    val softwareCommand = "$inputArgs -c:v libx264 -preset ultrafast -tune stillimage -crf 22 -movflags +faststart \"${mp4File.absolutePath}\""
+                    renderResult = ffmpegEngine.executeCommand(softwareCommand)
+                }
 
                 try {
                     pngFile.delete()
                 } catch (e: Exception) {}
 
-                if (renderResult is com.mhirex.editor.services.FFmpegRenderEngine.RenderResult.Success) {
+                if (renderResult is com.mhirex.editor.services.FFmpegRenderEngine.RenderResult.Success &&
+                    mp4File.exists() && mp4File.length() > 0L
+                ) {
                     Uri.fromFile(mp4File)
                 } else {
-                    Log.e(TAG, "FFmpeg failed to create freeze frame video")
+                    val error = (renderResult as? com.mhirex.editor.services.FFmpegRenderEngine.RenderResult.Failure)?.error
+                    Log.e(TAG, "FFmpeg failed to create freeze frame video: ${error?.takeLast(4000) ?: renderResult}")
+                    mp4File.delete()
                     null
                 }
-            }
+            } }.onFailure { error ->
+                Log.e(TAG, "Freeze-frame creation failed: ${error.message}", error)
+            }.getOrNull()
 
             isImportLoading = false
             loadingScreen.visibility = View.GONE
@@ -3777,7 +3892,8 @@ class VideoEditingActivity : AppCompatActivity() {
                     viewModel.updateSequenceOrder(newItems.drop(1))
                 }
                 Toast.makeText(this@VideoEditingActivity, R.string.toast_freeze_frame_added_to_sequence, Toast.LENGTH_SHORT).show()
-                onCreated?.invoke(globalPos)
+                val freezeItemIndex = newItems.indexOfFirst { it.uri == resultUri }
+                onCreated?.invoke(globalPos, freezeItemIndex)
             } else {
                 Toast.makeText(this@VideoEditingActivity, R.string.toast_failed_to_create_freeze_frame, Toast.LENGTH_SHORT).show()
             }
@@ -5427,7 +5543,7 @@ class VideoEditingActivity : AppCompatActivity() {
             pathView.text = customUri.path ?: customUriString
         } else {
             titleView.text = Branding.APP_NAME + " (Default)"
-            pathView.text = if (isAudioOnly) "${Environment.DIRECTORY_MUSIC}/${Branding.OUTPUT_FOLDER}" else "${Environment.DIRECTORY_MOVIES}/${Branding.OUTPUT_FOLDER}"
+            pathView.text = if (isAudioOnly) "${Environment.DIRECTORY_MUSIC}/${Branding.OUTPUT_FOLDER}" else "${Environment.DIRECTORY_DCIM}/${Branding.OUTPUT_FOLDER}"
         }
     }
 
@@ -5445,6 +5561,29 @@ class VideoEditingActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun scheduleAutomaticProjectSave(project: com.mhirex.editor.models.VideoProject) {
+        autoSaveJob?.cancel()
+        autoSaveJob = lifecycleScope.launch {
+            kotlinx.coroutines.delay(500)
+            val key = (projectSessionId ?: project.sourceUri.toString()).hashCode().toUInt().toString(16)
+            val folder = File(filesDir, "projects").apply { mkdirs() }
+            val file = File(folder, "$key.lcprj")
+            val json = com.mhirex.editor.utils.ProjectSerializer.serialize(
+                com.mhirex.editor.models.EditRecipe.fromVideoProject(project.sourceName, project)
+            )
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val temp = File(folder, "$key.tmp")
+                    temp.writeText(json)
+                    if (!temp.renameTo(file)) {
+                        temp.copyTo(file, overwrite = true)
+                        temp.delete()
+                    }
+                }.onFailure { Log.w(TAG, "Automatic project save failed: ${it.message}") }
+            }
         }
     }
 
@@ -5679,12 +5818,32 @@ class VideoEditingActivity : AppCompatActivity() {
 
     private var lastAppliedFilterName: String? = null
     private var lastAppliedAdjust: com.mhirex.editor.models.EditOperation.Adjust? = null
+    private var lastAppliedTimelineFilterName: String? = null
 
     private fun applyColorFilterToPlayer(filterName: String) {
         val idx = selectedVideoIndex ?: 0
         val activeAdjust = viewModel.project.value?.operations?.filterIsInstance<com.mhirex.editor.models.EditOperation.Adjust>()
             ?.find { it.index == idx }
         applyColorFilterAndAdjustToPlayer(filterName, activeAdjust)
+    }
+
+    private fun applyTimelineFilterToCanvas(filterName: String?) {
+        if (lastAppliedTimelineFilterName == filterName) return
+        lastAppliedTimelineFilterName = filterName
+        val matrix = when (filterName?.lowercase()) {
+            "monochrome", "noir" -> android.graphics.ColorMatrix().apply { setSaturation(0f) }
+            else -> null
+        }
+        if (matrix == null) {
+            playerContainer.setLayerType(View.LAYER_TYPE_NONE, null)
+        } else {
+            val paint = android.graphics.Paint().apply {
+                colorFilter = android.graphics.ColorMatrixColorFilter(matrix)
+            }
+            // Timeline filters are applied after the whole preview is composited, so template
+            // frames, stickers, text and the frozen video all share the same black-and-white look.
+            playerContainer.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+        }
     }
 
     private fun applyColorFilterAndAdjustToPlayer(
@@ -5720,7 +5879,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 0f, 0f, 1.4f, 0f, -50f,
                 0f, 0f, 0f, 1f, 0f
             )
-            "monochrome" -> floatArrayOf(
+            "monochrome", "noir" -> floatArrayOf(
                 0.33f, 0.59f, 0.11f, 0f, 0f,
                 0.33f, 0.59f, 0.11f, 0f, 0f,
                 0.33f, 0.59f, 0.11f, 0f, 0f,
@@ -5742,6 +5901,12 @@ class VideoEditingActivity : AppCompatActivity() {
                 1.2f, 0f, 0f, 0f, 0f,
                 0f, 1.0f, 0f, 0f, 10f,
                 0f, 0f, 1.4f, 0f, -20f,
+                0f, 0f, 0f, 1f, 0f
+            )
+            "sepia", "cinematic", "faded", "dramatic", "golden", "dreamy", "cartoon", "pastel" -> floatArrayOf(
+                1.1f, 0.04f, 0f, 0f, 8f,
+                0.02f, 0.98f, 0f, 0f, 2f,
+                0f, 0.02f, 0.88f, 0f, -4f,
                 0f, 0f, 0f, 1f, 0f
             )
             else -> null
@@ -5791,6 +5956,16 @@ class VideoEditingActivity : AppCompatActivity() {
                     0f, 0f, 0f, 1f, 0f
                 ))
                 baseMatrix.postConcat(expMatrix)
+            }
+            if (adjust.tint != 0) {
+                val tintOffset = adjust.tint / 100f * 40f
+                val tintMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                    1f, 0f, 0f, 0f, tintOffset,
+                    0f, 1f, 0f, 0f, -tintOffset,
+                    0f, 0f, 1f, 0f, tintOffset,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                baseMatrix.postConcat(tintMatrix)
             }
             if (adjust.warmth != 0) {
                 val rOffset = (adjust.warmth / 100f) * 30f
@@ -5849,11 +6024,15 @@ class VideoEditingActivity : AppCompatActivity() {
                 }
                 accumulatedStartMs += item.trimmedDurationMs
             }
-            val activeFilterName = viewModel.project.value?.operations?.filterIsInstance<com.mhirex.editor.models.EditOperation.ColorFilter>()
-                ?.find { it.index == activeClipIndex }?.filterName ?: "none"
+            val operations = viewModel.project.value?.operations.orEmpty()
+            val timelineFilter = operations.filterIsInstance<EditOperation.TimelineFilter>()
+                .lastOrNull { currentGlobalPos in it.startTimeMs..it.endTimeMs }
+            val activeFilterName = operations.filterIsInstance<com.mhirex.editor.models.EditOperation.ColorFilter>()
+                .find { it.index == activeClipIndex }?.filterName ?: "none"
             val activeAdjust = viewModel.project.value?.operations?.filterIsInstance<com.mhirex.editor.models.EditOperation.Adjust>()
                 ?.find { it.index == activeClipIndex }
             applyColorFilterAndAdjustToPlayer(activeFilterName, activeAdjust)
+            applyTimelineFilterToCanvas(timelineFilter?.filterName)
             
             if (activeClipIndex >= 0 && activeClipIndex < sequenceItems.size) {
                 val relTimeMs = currentGlobalPos - accumulatedStartMs
@@ -6190,6 +6369,26 @@ class VideoEditingActivity : AppCompatActivity() {
                     filePath = path
                 } else {
                     Log.e("PathError", "Unreadable file URI: $uri")
+                }
+            }
+            "android.resource" -> {
+                filePath = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    var destination: File? = null
+                    try {
+                        val resourceId = uri.lastPathSegment?.toIntOrNull()
+                            ?: throw java.io.IOException("Invalid Android resource URI: $uri")
+                        val extension = if (resources.getResourceTypeName(resourceId) == "raw") ".wav" else ".bin"
+                        destination = registerOwnedTempFile(File.createTempFile("resource_", extension, cacheDir))
+                        resources.openRawResource(resourceId).use { input ->
+                            destination.outputStream().use { output -> input.copyTo(output) }
+                        }
+                        if (destination.length() == 0L) throw java.io.IOException("Android resource is empty: $uri")
+                        destination.absolutePath
+                    } catch (e: Exception) {
+                        deleteOwnedTempFile(destination, "failed Android resource import")
+                        Log.e("PathError", "Failed to copy Android resource URI: ${e.message}", e)
+                        null
+                    }
                 }
             }
             else -> Log.e("PathError", "Unsupported URI scheme: ${uri.scheme}")
@@ -6786,6 +6985,7 @@ class VideoEditingActivity : AppCompatActivity() {
         val overlayOps = project.operations.filter { it is EditOperation.AddText || it is EditOperation.AddImageOverlay }
         if (overlayOps.isNotEmpty()) {
             textTrackContainer.visibility = View.VISIBLE
+            var previousTemplateGroup: String? = null
             // Reverse so that the top-most overlay is visually at the top of the timeline track stack
             for (op in overlayOps.reversed()) {
                 val opId = when (op) {
@@ -6793,6 +6993,11 @@ class VideoEditingActivity : AppCompatActivity() {
                     is EditOperation.AddImageOverlay -> op.id
                     else -> ""
                 }
+                val templateGroup = templateGroupName(opId)
+                if (templateGroup != null && templateGroup != previousTemplateGroup) {
+                    addTemplateTrackGroupHeader(textTrackContainer, templateGroup)
+                }
+                previousTemplateGroup = templateGroup
                 val trackView = com.mhirex.editor.customviews.TrackTrimView(this).apply {
                     layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dpToPx()).apply {
                         topMargin = 4.dpToPx()
@@ -6817,7 +7022,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 if (op is EditOperation.AddText) {
                     trackView.apply {
                         trackColor = android.graphics.Color.parseColor("#E91E63") // Pink for text
-                        trackLabel = op.text
+                        trackLabel = if (templateGroup != null) "↳ ${op.text}" else op.text
                         trackIcon = androidx.core.content.ContextCompat.getDrawable(this@VideoEditingActivity, R.drawable.ic_text_24)
                         activeStartMs = op.startTimeMs ?: 0L
                         activeEndMs = op.endTimeMs ?: totalSequenceDuration
@@ -6839,13 +7044,14 @@ class VideoEditingActivity : AppCompatActivity() {
                 } else if (op is EditOperation.AddImageOverlay) {
                     trackView.apply {
                         trackColor = android.graphics.Color.parseColor("#FF9800") // Orange for image
-                        trackLabel = when {
+                        val imageLabel = when {
                             op.id.startsWith("template_birthday_frame_") || op.imageUri.lastPathSegment == "birthday-frame.png" -> "Birthday frame"
-                            op.id.startsWith("template_death_skull_shake_") -> "Death skull shake"
+                            op.id.startsWith("template_death_skull_") -> "Death skull"
                             op.id.startsWith("template_frame_") -> op.id.removePrefix("template_frame_")
                                 .substringBeforeLast("_").replace('_', ' ').replaceFirstChar { it.uppercase() }
                             else -> op.imageUri.lastPathSegment ?: "Image Overlay"
                         }
+                        trackLabel = if (templateGroup != null) "↳ $imageLabel" else imageLabel
                         trackIcon = androidx.core.content.ContextCompat.getDrawable(this@VideoEditingActivity, R.drawable.ic_image_24)
                         activeStartMs = op.startTimeMs ?: 0L
                         activeEndMs = op.endTimeMs ?: totalSequenceDuration
@@ -6895,13 +7101,19 @@ class VideoEditingActivity : AppCompatActivity() {
         val audioOps = project.operations.filterIsInstance<EditOperation.AddBackgroundAudio>()
         if (audioOps.isNotEmpty()) {
             audioTrackContainer.visibility = View.VISIBLE
+            var previousTemplateGroup: String? = null
             for (op in audioOps) {
+                val templateGroup = templateGroupName(op.id)
+                if (templateGroup != null && templateGroup != previousTemplateGroup) {
+                    addTemplateTrackGroupHeader(audioTrackContainer, templateGroup)
+                }
+                previousTemplateGroup = templateGroup
                 val trackView = com.mhirex.editor.customviews.TrackTrimView(this).apply {
                     layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 48.dpToPx()).apply {
                         topMargin = 4.dpToPx()
                     }
                     trackColor = android.graphics.Color.parseColor("#4CAF50") // Green for audio
-                    trackLabel = when {
+                    val audioLabel = when {
                         op.id.startsWith("template_birthday_song_") -> "Birthday song"
                         op.id.startsWith("template_birthday_chime_") -> "Birthday chime"
                         op.id.startsWith("template_death_freeze_sound_") -> "Freeze sound"
@@ -6909,6 +7121,7 @@ class VideoEditingActivity : AppCompatActivity() {
                         op.id.startsWith("template_death_shake_sound_") -> "Shake sound"
                         else -> op.audioUri.lastPathSegment ?: "Audio Track"
                     }
+                    trackLabel = if (templateGroup != null) "↳ $audioLabel" else audioLabel
                     isAudioTrack = true
                     isSelectedTrack = (op.id == viewModel.selectedOperationId.value)
                     trackIcon = androidx.core.content.ContextCompat.getDrawable(this@VideoEditingActivity, R.drawable.ic_audio_24)
@@ -7255,7 +7468,16 @@ class VideoEditingActivity : AppCompatActivity() {
             Pair("monochrome", "B&W"),
             Pair("vignette", "Vignette"),
             Pair("negative", "Negative"),
-            Pair("crossprocess", "Cross P")
+            Pair("crossprocess", "Cross P"),
+            Pair("cinematic", "Cinematic"),
+            Pair("sepia", "Sepia"),
+            Pair("faded", "Faded"),
+            Pair("dramatic", "Dramatic"),
+            Pair("golden", "Golden"),
+            Pair("dreamy", "Dreamy"),
+            Pair("cartoon", "Cartoon"),
+            Pair("pastel", "Pastel"),
+            Pair("noir", "Noir")
         )
 
         val itemBgs = mutableMapOf<String, FrameLayout>()
@@ -7346,32 +7568,17 @@ class VideoEditingActivity : AppCompatActivity() {
         sheet.setContentView(view)
 
         view.findViewById<View>(R.id.btnTemplateFreezeSkull).setBounceClickListener {
-            val selectedIndex = selectedVideoIndex
             val sequence = getSequenceItems()
-            if (selectedIndex == null || selectedIndex !in sequence.indices) {
-                Toast.makeText(this, "Select a clip and place the playhead first.", Toast.LENGTH_SHORT).show()
+            if (sequence.isEmpty()) {
+                Toast.makeText(this, "Add a clip before applying Death Freeze.", Toast.LENGTH_SHORT).show()
                 return@setBounceClickListener
             }
             sheet.dismiss()
-            freezeFrameAtCurrentPosition { freezeAtMs ->
-                getSequenceItems().indices.forEach { viewModel.setColorFilter(it, "monochrome") }
+            freezeFrameAtCurrentPosition(shakeBackground = true, usePlayheadClip = true) { freezeAtMs, freezeItemIndex ->
                 val duration = getTotalSequenceDuration()
                 val cueStart = freezeAtMs.coerceAtMost(duration)
-                val cueEnd = (cueStart + 2800L).coerceAtMost(duration)
+                val cueEnd = (cueStart + 3000L).coerceAtMost(duration)
                 val templateStamp = System.nanoTime()
-                viewModel.addOperation(
-                    EditOperation.AddText(
-                        text = "RIP",
-                        fontSize = 64,
-                        position = TextPosition.CENTER,
-                        color = "#FFFFFF",
-                        startTimeMs = cueStart,
-                        endTimeMs = cueEnd,
-                        id = "template_death_title_$templateStamp",
-                        borderThickness = 2,
-                        borderColor = "#171922"
-                    )
-                )
                 val skullDrawable = resources.getDrawable(R.drawable.death_skull, theme)
                 val canvasAspect = currentCanvasAspect(viewModel.project.value, 9f / 16f)
                 val skullSize = overlaySizeForAspect(
@@ -7379,36 +7586,27 @@ class VideoEditingActivity : AppCompatActivity() {
                     canvasAspect,
                     0.28f
                 )
-                val shakeKeyframes = listOf(
-                    EditOperation.KeyframePoint(0L, 0.50f, 0.42f),
-                    EditOperation.KeyframePoint(70L, 0.45f, 0.39f),
-                    EditOperation.KeyframePoint(140L, 0.55f, 0.46f),
-                    EditOperation.KeyframePoint(220L, 0.44f, 0.42f),
-                    EditOperation.KeyframePoint(300L, 0.56f, 0.39f),
-                    EditOperation.KeyframePoint(380L, 0.46f, 0.46f),
-                    EditOperation.KeyframePoint(470L, 0.54f, 0.41f),
-                    EditOperation.KeyframePoint(580L, 0.48f, 0.43f),
-                    EditOperation.KeyframePoint(720L, 0.52f, 0.42f),
-                    EditOperation.KeyframePoint(900L, 0.50f, 0.42f)
-                )
-                viewModel.addOperation(
+                val templateLayers = mutableListOf<EditOperation>(
                     EditOperation.AddImageOverlay(
-                        imageUri = Uri.parse("android.resource://$packageName/${R.drawable.death_skull}"),
+                        imageUri = Uri.fromFile(copyTemplateImageToFile(R.drawable.death_skull, "death-skull-transparent-v2.png")),
                         relativeX = 0.5f,
-                        relativeY = 0.42f,
+                        relativeY = 0.5f,
                         relativeWidth = skullSize.first,
                         relativeHeight = skullSize.second,
                         rotationAngle = 0f,
                         startTimeMs = cueStart,
                         endTimeMs = cueEnd,
-                        id = "template_death_skull_shake_$templateStamp",
-                        fileDurationMs = 2800L,
+                        id = "template_death_skull_overlay_$templateStamp",
+                        fileDurationMs = 3000L,
                         isLooping = true,
-                        positionKeyframes = shakeKeyframes,
-                        animationPreset = "Shake"
-                    )
-                )
-                viewModel.addOperation(
+                        rotationKeyframes = listOf(
+                            EditOperation.KeyframePoint(0L, -4f),
+                            EditOperation.KeyframePoint(700L, 4f),
+                            EditOperation.KeyframePoint(1400L, -3f),
+                            EditOperation.KeyframePoint(2100L, 3f),
+                            EditOperation.KeyframePoint(3000L, 0f)
+                        )
+                    ),
                     EditOperation.AddBackgroundAudio(
                         audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_stinger}"),
                         volume = 0.72f,
@@ -7418,9 +7616,7 @@ class VideoEditingActivity : AppCompatActivity() {
                         fadeInDurationMs = 20L,
                         fadeOutDurationMs = 250L,
                         id = "template_death_freeze_sound_$templateStamp"
-                    )
-                )
-                viewModel.addOperation(
+                    ),
                     EditOperation.AddBackgroundAudio(
                         audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_impact}"),
                         volume = 0.84f,
@@ -7429,9 +7625,7 @@ class VideoEditingActivity : AppCompatActivity() {
                         originalDurationMs = 720L,
                         fadeOutDurationMs = 180L,
                         id = "template_death_impact_$templateStamp"
-                    )
-                )
-                viewModel.addOperation(
+                    ),
                     EditOperation.AddBackgroundAudio(
                         audioUri = Uri.parse("android.resource://$packageName/${R.raw.shake_rattle}"),
                         volume = 0.7f,
@@ -7443,6 +7637,15 @@ class VideoEditingActivity : AppCompatActivity() {
                         id = "template_death_shake_sound_$templateStamp"
                     )
                 )
+                viewModel.executeCommand(com.mhirex.editor.commands.MutateListCommand("Apply Death template") { operations ->
+                    val updated = operations.filterNot {
+                        it is EditOperation.ColorFilter && it.index == freezeItemIndex ||
+                            it is EditOperation.TimelineFilter && it.id.startsWith("template_death_bw_")
+                    }.toMutableList()
+                    updated.add(EditOperation.TimelineFilter("monochrome", cueStart, cueEnd, "template_death_bw_$templateStamp"))
+                    updated.addAll(templateLayers)
+                    updated
+                })
                 viewModel.project.value?.let { renderTracks(it) }
             }
         }
@@ -7513,9 +7716,9 @@ class VideoEditingActivity : AppCompatActivity() {
         val imageAspect = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.coerceAtLeast(1)
         val (overlayWidth, overlayHeight) = overlaySizeForAspect(imageAspect, currentCanvasAspect(project, 9f / 16f), 0.96f)
         val templateStamp = System.nanoTime()
-        viewModel.addOperation(
+        addTemplateLayers("Add $templateName", listOf(
             EditOperation.AddImageOverlay(
-                imageUri = Uri.parse("android.resource://$packageName/$imageResource"),
+                imageUri = Uri.fromFile(copyTemplateImageToFile(imageResource, "template-frame-$imageResource.png")),
                 relativeX = 0.5f,
                 relativeY = 0.5f,
                 relativeWidth = overlayWidth,
@@ -7526,8 +7729,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 fileDurationMs = duration,
                 id = "template_frame_${templateName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")}_$templateStamp"
             )
-        )
-        viewModel.project.value?.let { renderTracks(it) }
+        ))
         Toast.makeText(this, "$templateName added as a timeline overlay.", Toast.LENGTH_SHORT).show()
     }
 
@@ -7548,6 +7750,55 @@ class VideoEditingActivity : AppCompatActivity() {
         } else {
             (maxSide * imageAspect / canvasAspect) to maxSide
         }
+    }
+
+    private fun copyTemplateImageToFile(resourceId: Int, fileName: String): File {
+        val directory = File(filesDir, "template-assets").apply { mkdirs() }
+        val target = File(directory, fileName)
+        if (target.exists() && target.length() > 0L) return target
+        val drawable = resources.getDrawable(resourceId, theme)
+        val width = drawable.intrinsicWidth.coerceAtLeast(1)
+        val height = drawable.intrinsicHeight.coerceAtLeast(1)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            android.graphics.Canvas(bitmap).also { canvas ->
+                drawable.setBounds(0, 0, width, height)
+                drawable.draw(canvas)
+            }
+            target.outputStream().use { output ->
+                check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) { "Could not write template image" }
+            }
+        } finally {
+            bitmap.recycle()
+        }
+        return target
+    }
+
+    private fun addTemplateLayers(description: String, layers: List<EditOperation>) {
+        if (layers.isEmpty()) return
+        viewModel.executeCommand(com.mhirex.editor.commands.MutateListCommand(description) { operations ->
+            operations + layers
+        })
+        viewModel.project.value?.let { renderTracks(it) }
+    }
+
+    private fun templateGroupName(operationId: String): String? = when {
+        operationId.startsWith("template_birthday_") -> "Happy Birthday"
+        operationId.startsWith("template_death_") -> "Death Freeze"
+        operationId.startsWith("template_frame_") -> operationId.removePrefix("template_frame_")
+            .substringBeforeLast("_").replace('_', ' ').replaceFirstChar { it.uppercase() }
+        else -> null
+    }
+
+    private fun addTemplateTrackGroupHeader(container: LinearLayout, groupName: String) {
+        val header = TextView(this).apply {
+            text = "$groupName template layers"
+            textSize = 11f
+            setTextColor(getColor(R.color.toolTextInactive))
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            setPadding(14.dpToPx(), 6.dpToPx(), 8.dpToPx(), 0)
+        }
+        container.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 26.dpToPx()))
     }
 
     private fun showCreatorWatermarkDialog() {
@@ -7592,9 +7843,9 @@ class VideoEditingActivity : AppCompatActivity() {
             .create().also { dialog ->
                 dialog.setOnShowListener {
                     dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                        val handle = handleInput.text?.toString()?.trim()?.removePrefix("@")?.take(32).orEmpty()
-                        if (handle.isBlank() || !handle.matches(Regex("[A-Za-z0-9._-]+"))) {
-                            handleInput.error = "Use letters, numbers, dots, underscores or hyphens."
+                        val handle = handleInput.text?.toString()?.trim()?.removePrefix("@")?.trim().orEmpty()
+                        if (handle.isBlank() || handle.length > 32 || handle.any { it.isISOControl() }) {
+                            handleInput.error = "Enter a name up to 32 characters."
                             return@setOnClickListener
                         }
                         val platform = if (platforms.checkedChipId == instagramChip.id) "instagram" else "youtube"
@@ -7641,33 +7892,27 @@ class VideoEditingActivity : AppCompatActivity() {
         creatorWatermarksBeingAdded.add(operationSuffix)
         lifecycleScope.launch {
             try {
-                val videoAspect = withContext(Dispatchers.IO) {
-                    val retriever = MediaMetadataRetriever()
-                    try {
-                        retriever.setDataSource(this@VideoEditingActivity, project.sourceUri)
-                        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 9f
-                        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 16f
-                        width / height
-                    } finally {
-                        runCatching { retriever.release() }
-                    }
-                }.coerceIn(0.45f, 2.4f)
+                val videoAspect = (primaryVideoAspectRatio.takeIf { it.isFinite() && it > 0f }
+                    ?: currentCanvasAspect(project, 9f / 16f)).coerceIn(0.45f, 2.4f)
                 val image = if (platform == "instagram") R.drawable.brand_instagram else R.drawable.brand_youtube
-                viewModel.addOperation(
+                val badgeFile = copyTemplateImageToFile(image, "creator-watermark-$image.png")
+                val badgeAspect = resources.getDrawable(image, theme).let { drawable ->
+                    drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.coerceAtLeast(1)
+                }
+                val badgeWidth = 0.052f
+                val cleanName = name.take(32)
+                addTemplateLayers("Add creator watermark", listOf(
                     EditOperation.AddImageOverlay(
-                        imageUri = Uri.parse("android.resource://$packageName/$image"),
+                        imageUri = Uri.fromFile(badgeFile),
                         relativeX = 0.955f,
                         relativeY = 0.925f,
-                        relativeWidth = 0.052f,
-                        relativeHeight = 0.052f * videoAspect,
+                        relativeWidth = badgeWidth,
+                        relativeHeight = (badgeWidth * videoAspect / badgeAspect).coerceIn(0.025f, 0.12f),
                         rotationAngle = 0f,
                         id = operationSuffix,
                         opacity = 0.94f,
                         isLooping = true,
-                    )
-                )
-                val cleanName = name.filter { it.isLetterOrDigit() || it in "@._- " }.take(32)
-                viewModel.addOperation(
+                    ),
                     EditOperation.AddText(
                         text = "@$cleanName",
                         fontSize = 20,
@@ -7680,8 +7925,8 @@ class VideoEditingActivity : AppCompatActivity() {
                         borderThickness = 2,
                         borderColor = "#000000",
                     )
-                )
-                viewModel.project.value?.let { renderTracks(it) }
+                ))
+                Toast.makeText(this@VideoEditingActivity, "Creator watermark added to the timeline.", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Log.w(TAG, "Could not add creator watermark", e)
                 Toast.makeText(this@VideoEditingActivity, "Could not add the creator watermark.", Toast.LENGTH_SHORT).show()
@@ -7732,7 +7977,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 val relativeWidth = (track.baseWidthFraction * widthMultiplier).coerceIn(0.12f, 0.9f)
                 val relativeHeight = (relativeWidth * (videoWidth / videoHeight) / assetAspect).coerceIn(0.08f, 0.75f)
                 val overlay = EditOperation.AddImageOverlay(
-                    imageUri = Uri.parse("android.resource://$packageName/$resourceId"),
+                    imageUri = Uri.fromFile(copyTemplateImageToFile(resourceId, "face-accessory-$resourceId.png")),
                     relativeX = track.positions.first().valueX,
                     relativeY = track.positions.first().valueY,
                     relativeWidth = relativeWidth,
@@ -8282,7 +8527,9 @@ class VideoEditingActivity : AppCompatActivity() {
             return
         }
         val templateStamp = System.nanoTime()
-        viewModel.addOperation(
+        val birthdayFrame = createBirthdayFrameAsset()
+        val frameSize = overlaySizeForAspect(720f / 1280f, currentCanvasAspect(viewModel.project.value, 9f / 16f), 0.96f)
+        val templateLayers = mutableListOf<EditOperation>(
             EditOperation.AddText(
                 text = "HAPPY BIRTHDAY!",
                 fontSize = 48,
@@ -8306,11 +8553,7 @@ class VideoEditingActivity : AppCompatActivity() {
                     EditOperation.KeyframePoint(280L, 1f)
                 ),
                 animationPreset = "Bounce"
-            )
-        )
-        val birthdayFrame = createBirthdayFrameAsset()
-        val frameSize = overlaySizeForAspect(720f / 1280f, currentCanvasAspect(viewModel.project.value, 9f / 16f), 0.96f)
-        viewModel.addOperation(
+            ),
             EditOperation.AddImageOverlay(
                 imageUri = Uri.fromFile(birthdayFrame),
                 relativeX = 0.5f,
@@ -8324,7 +8567,42 @@ class VideoEditingActivity : AppCompatActivity() {
                 fileDurationMs = duration
             )
         )
-        viewModel.addOperation(
+        val balloonColors = listOf(
+            android.graphics.Color.rgb(248, 84, 151),
+            android.graphics.Color.rgb(54, 190, 230),
+            android.graphics.Color.rgb(255, 194, 72),
+            android.graphics.Color.rgb(174, 117, 255)
+        )
+        val canvasAspect = currentCanvasAspect(viewModel.project.value, 9f / 16f)
+        val (balloonWidth, balloonHeight) = overlaySizeForAspect(360f / 520f, canvasAspect, 0.19f)
+        val middleMs = duration / 2L
+        balloonColors.forEachIndexed { index, color ->
+            val startX = listOf(0.18f, 0.4f, 0.64f, 0.83f)[index]
+            val sway = if (index % 2 == 0) 0.08f else -0.08f
+            templateLayers.add(EditOperation.AddImageOverlay(
+                imageUri = Uri.fromFile(createBirthdayBalloonAsset(color)),
+                relativeX = startX,
+                relativeY = 1.14f,
+                relativeWidth = balloonWidth,
+                relativeHeight = balloonHeight,
+                rotationAngle = if (index % 2 == 0) -5f else 5f,
+                startTimeMs = 0L,
+                endTimeMs = duration,
+                id = "template_birthday_balloon_${index}_$templateStamp",
+                fileDurationMs = duration,
+                positionKeyframes = listOf(
+                    EditOperation.KeyframePoint(0L, startX, 1.14f),
+                    EditOperation.KeyframePoint(middleMs, (startX + sway).coerceIn(0.12f, 0.88f), 0.5f),
+                    EditOperation.KeyframePoint(duration, startX, -0.14f)
+                ),
+                rotationKeyframes = listOf(
+                    EditOperation.KeyframePoint(0L, if (index % 2 == 0) -8f else 8f),
+                    EditOperation.KeyframePoint(middleMs, if (index % 2 == 0) 8f else -8f),
+                    EditOperation.KeyframePoint(duration, if (index % 2 == 0) -6f else 6f)
+                )
+            ))
+        }
+        templateLayers.addAll(listOf(
             EditOperation.AddBackgroundAudio(
                 audioUri = Uri.parse("android.resource://$packageName/${R.raw.happy_birthday_melody}"),
                 volume = 0.8f,
@@ -8334,9 +8612,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 fadeInDurationMs = 150L,
                 fadeOutDurationMs = 450L,
                 id = "template_birthday_song_$templateStamp"
-            )
-        )
-        viewModel.addOperation(
+            ),
             EditOperation.AddBackgroundAudio(
                 audioUri = Uri.parse("android.resource://$packageName/${R.raw.birthday_chime}"),
                 volume = 0.62f,
@@ -8347,13 +8623,13 @@ class VideoEditingActivity : AppCompatActivity() {
                 fadeOutDurationMs = 300L,
                 id = "template_birthday_chime_$templateStamp"
             )
-        )
-        viewModel.project.value?.let { renderTracks(it) }
+        ))
+        addTemplateLayers("Apply Happy Birthday template", templateLayers)
     }
 
     private fun createBirthdayFrameAsset(): File {
         val directory = File(filesDir, "template-assets").apply { mkdirs() }
-        val file = File(directory, "birthday-frame.png")
+        val file = File(directory, "birthday-frame-v2.png")
         if (file.exists() && file.length() > 0L) return file
         val bitmap = android.graphics.Bitmap.createBitmap(720, 1280, android.graphics.Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(bitmap)
@@ -8366,21 +8642,6 @@ class VideoEditingActivity : AppCompatActivity() {
         paint.color = android.graphics.Color.rgb(255, 113, 174)
         canvas.drawRoundRect(38f, 38f, 682f, 1242f, 48f, 48f, paint)
         paint.style = android.graphics.Paint.Style.FILL
-        val balloonColors = intArrayOf(
-            android.graphics.Color.rgb(248, 84, 151),
-            android.graphics.Color.rgb(54, 207, 230),
-            android.graphics.Color.rgb(255, 194, 72),
-            android.graphics.Color.rgb(174, 117, 255)
-        )
-        val positions = listOf(90f to 120f, 190f to 75f, 530f to 95f, 630f to 145f, 115f to 1090f, 605f to 1120f)
-        positions.forEachIndexed { index, (x, y) ->
-            paint.color = balloonColors[index % balloonColors.size]
-            canvas.drawOval(x - 34f, y - 46f, x + 34f, y + 42f, paint)
-            val string = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.argb(190, 255, 255, 255); strokeWidth = 3f; style = android.graphics.Paint.Style.STROKE
-            }
-            canvas.drawLine(x, y + 40f, x + (if (index % 2 == 0) 18f else -18f), y + 118f, string)
-        }
         paint.color = android.graphics.Color.rgb(255, 226, 151)
         paint.textAlign = android.graphics.Paint.Align.CENTER
         paint.textSize = 42f
@@ -8390,6 +8651,42 @@ class VideoEditingActivity : AppCompatActivity() {
         canvas.drawText("✦", 92f, 910f, paint)
         canvas.drawText("✦", 625f, 885f, paint)
         file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+        return file
+    }
+
+    private fun createBirthdayBalloonAsset(color: Int): File {
+        val directory = File(filesDir, "template-assets").apply { mkdirs() }
+        val file = File(directory, "birthday-balloon-${color.toUInt().toString(16)}.png")
+        if (file.exists() && file.length() > 0L) return file
+        val bitmap = Bitmap.createBitmap(360, 520, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val bodyPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.RadialGradient(
+                150f, 125f, 190f,
+                intArrayOf(android.graphics.Color.WHITE, color, android.graphics.Color.rgb(143, 57, 173)),
+                floatArrayOf(0f, 0.48f, 1f), android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+        canvas.drawOval(62f, 30f, 298f, 310f, bodyPaint)
+        bodyPaint.shader = null
+        bodyPaint.color = android.graphics.Color.argb(170, 255, 255, 255)
+        canvas.drawOval(100f, 72f, 143f, 178f, bodyPaint)
+        val knot = android.graphics.Path().apply {
+            moveTo(168f, 306f); lineTo(192f, 306f); lineTo(180f, 331f); close()
+        }
+        bodyPaint.color = color
+        canvas.drawPath(knot, bodyPaint)
+        val stringPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = android.graphics.Color.argb(220, 255, 248, 225)
+            strokeWidth = 5f
+            style = android.graphics.Paint.Style.STROKE
+        }
+        val stringPath = android.graphics.Path().apply {
+            moveTo(180f, 329f); cubicTo(140f, 380f, 225f, 414f, 178f, 510f)
+        }
+        canvas.drawPath(stringPath, stringPaint)
+        file.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
         bitmap.recycle()
         return file
     }
@@ -8990,7 +9287,7 @@ class VideoEditingActivity : AppCompatActivity() {
             }
         }
 
-        // Fallback or Default to Movies/Mhirex
+        // Fallback or default to DCIM/Mhirex
         return try {
             val contentValues = android.content.ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, "${prefix}${System.currentTimeMillis()}$ext")
@@ -8998,7 +9295,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 if (isAudioOnly) {
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MUSIC + "/" + Branding.OUTPUT_FOLDER)
                 } else {
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + Branding.OUTPUT_FOLDER)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/" + Branding.OUTPUT_FOLDER)
                 }
             }
             val collectionUri = if (isAudioOnly) MediaStore.Audio.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
@@ -9324,6 +9621,68 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
+    private fun showBlurRegionDialog(clipIndex: Int) {
+        val sequence = getSequenceItems()
+        if (clipIndex !in sequence.indices) return
+        val startMs = sequence.take(clipIndex).sumOf { it.trimmedDurationMs }
+        val endMs = startMs + sequence[clipIndex].trimmedDurationMs
+        val existing = viewModel.project.value?.operations?.filterIsInstance<EditOperation.BlurRegion>()
+            ?.firstOrNull { it.index == clipIndex }
+        var centerX = existing?.centerX ?: 0.5f
+        var centerY = existing?.centerY ?: 0.5f
+        var width = existing?.width ?: 0.32f
+        var height = existing?.height ?: 0.32f
+        var amount = existing?.amount ?: 40
+        var shape = existing?.shape ?: "rectangle"
+        val sheet = BottomSheetDialog(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(20.dpToPx(), 18.dpToPx(), 20.dpToPx(), 12.dpToPx())
+            background = getDrawable(R.drawable.floating_panel_background)
+        }
+        root.addView(TextView(this).apply {
+            text = "Blur a specific area"
+            textSize = 19f
+            setTextColor(getColor(R.color.textColor))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        })
+        val shapeSpinner = Spinner(this)
+        shapeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, listOf("Rectangle", "Ellipse"))
+        shapeSpinner.setSelection(if (shape.equals("ellipse", true)) 1 else 0)
+        root.addView(shapeSpinner)
+        fun addSlider(label: String, initial: Int, from: Float, to: Float, onChange: (Int) -> Unit) {
+            val title = TextView(this).apply { text = "$label: $initial"; setTextColor(getColor(R.color.textColor)); textSize = 13f }
+            root.addView(title)
+            val slider = Slider(this).apply { valueFrom = from; valueTo = to; value = initial.toFloat() }
+            slider.addOnChangeListener { _, value, _ -> title.text = "$label: ${value.toInt()}"; onChange(value.toInt()) }
+            root.addView(slider)
+        }
+        addSlider("Horizontal position", (centerX * 100).toInt(), 0f, 100f) { centerX = it / 100f }
+        addSlider("Vertical position", (centerY * 100).toInt(), 0f, 100f) { centerY = it / 100f }
+        addSlider("Width", (width * 100).toInt(), 5f, 100f) { width = it / 100f }
+        addSlider("Height", (height * 100).toInt(), 5f, 100f) { height = it / 100f }
+        addSlider("Blur strength", amount, 1f, 100f) { amount = it }
+        val buttons = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        val cancel = Button(this).apply { text = "Cancel"; setOnClickListener { sheet.dismiss() } }
+        val apply = Button(this).apply {
+            text = "Apply"
+            setOnClickListener {
+                shape = if (shapeSpinner.selectedItemPosition == 1) "ellipse" else "rectangle"
+                val updated = EditOperation.BlurRegion(clipIndex, startMs, endMs, centerX, centerY, width, height, amount, shape, existing?.id ?: System.nanoTime().toString())
+                viewModel.executeCommand(com.mhirex.editor.commands.MutateListCommand("Apply area blur") { operations ->
+                    operations.filterNot { it is EditOperation.BlurRegion && it.index == clipIndex }.toMutableList().apply { add(updated) }
+                })
+                viewModel.project.value?.let { renderTracks(it) }
+                sheet.dismiss()
+            }
+        }
+        buttons.addView(cancel)
+        buttons.addView(apply)
+        root.addView(buttons)
+        sheet.setContentView(root)
+        sheet.show()
+    }
+
     private fun showAdjustSelectionDialog(clipIndex: Int) {
         val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_adjustments, null)
@@ -9349,7 +9708,11 @@ class VideoEditingActivity : AppCompatActivity() {
             Pair("saturation", "Saturation"),
             Pair("exposure", "Exposure"),
             Pair("sharpen", "Sharpen"),
-            Pair("vignette", "Vignette")
+            Pair("vignette", "Vignette"),
+            Pair("tint", "Tint"),
+            Pair("blur", "Blur"),
+            Pair("motionBlur", "Motion Blur"),
+            Pair("areaBlur", "Area Blur")
         )
 
         val itemBgs = mutableMapOf<String, FrameLayout>()
@@ -9367,6 +9730,9 @@ class VideoEditingActivity : AppCompatActivity() {
                 "exposure" -> localAdjust.exposure
                 "sharpen" -> localAdjust.sharpen
                 "vignette" -> localAdjust.vignette
+                "tint" -> localAdjust.tint
+                "blur" -> localAdjust.blur
+                "motionBlur" -> localAdjust.motionBlur
                 else -> 0
             }
         }
@@ -9435,6 +9801,11 @@ class VideoEditingActivity : AppCompatActivity() {
             }
 
             itemView.setOnClickListener {
+                if (id == "areaBlur") {
+                    bottomSheet.dismiss()
+                    showBlurRegionDialog(clipIndex)
+                    return@setOnClickListener
+                }
                 if (id == "reset") {
                     localAdjust = com.mhirex.editor.models.EditOperation.Adjust(index = clipIndex)
                     viewModel.setAdjust(
@@ -9447,7 +9818,8 @@ class VideoEditingActivity : AppCompatActivity() {
                         saturation = 0,
                         exposure = 0,
                         sharpen = 0,
-                        vignette = 0
+                        vignette = 0,
+                        tint = 0, blur = 0, motionBlur = 0
                     )
                     applyColorFilterAndAdjustToPlayer(activeFilterName, localAdjust)
                     refreshSelectionStates()
@@ -9475,6 +9847,9 @@ class VideoEditingActivity : AppCompatActivity() {
                     "exposure" -> localAdjust.copy(exposure = intVal)
                     "sharpen" -> localAdjust.copy(sharpen = intVal)
                     "vignette" -> localAdjust.copy(vignette = intVal)
+                    "tint" -> localAdjust.copy(tint = intVal)
+                    "blur" -> localAdjust.copy(blur = intVal)
+                    "motionBlur" -> localAdjust.copy(motionBlur = intVal)
                     else -> localAdjust
                 }
 
@@ -9490,7 +9865,8 @@ class VideoEditingActivity : AppCompatActivity() {
                     saturation = localAdjust.saturation,
                     exposure = localAdjust.exposure,
                     sharpen = localAdjust.sharpen,
-                    vignette = localAdjust.vignette
+                    vignette = localAdjust.vignette,
+                    tint = localAdjust.tint, blur = localAdjust.blur, motionBlur = localAdjust.motionBlur
                 )
                 applyColorFilterAndAdjustToPlayer(activeFilterName, localAdjust)
                 refreshSelectionStates()
@@ -9513,7 +9889,8 @@ class VideoEditingActivity : AppCompatActivity() {
                     saturation = localAdjust.saturation,
                     exposure = localAdjust.exposure,
                     sharpen = localAdjust.sharpen,
-                    vignette = localAdjust.vignette
+                    vignette = localAdjust.vignette,
+                    tint = localAdjust.tint, blur = localAdjust.blur, motionBlur = localAdjust.motionBlur
                 )
             }
             applyColorFilterAndAdjustToPlayer(activeFilterName, localAdjust)
@@ -9599,6 +9976,38 @@ class VideoEditingActivity : AppCompatActivity() {
         }
 
         return targets.toList().sorted()
+    }
+
+    private fun removeSelectedImageBackground() {
+        val selectedId = viewModel.selectedOperationId.value ?: run {
+            Toast.makeText(this, "Finish adding the image first, then select it to remove its background.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val operation = viewModel.project.value?.operations?.firstOrNull { it.id == selectedId } as? EditOperation.AddImageOverlay
+            ?: return
+        showLoading("Removing background...")
+        lifecycleScope.launch {
+            val output = withContext(Dispatchers.IO) {
+                runCatching {
+                    val bitmap = contentResolver.openInputStream(operation.imageUri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+                        ?: error("Could not open this image")
+                    val result = com.mhirex.editor.services.BackgroundRemovalProcessor.remove(this@VideoEditingActivity, bitmap)
+                    val file = File(cacheDir, "cutout_${System.nanoTime()}.png")
+                    java.io.FileOutputStream(file).use { result.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                    bitmap.recycle()
+                    result.recycle()
+                    Uri.fromFile(file)
+                }
+            }
+            loadingScreen.visibility = View.GONE
+            output.onSuccess { uri ->
+                viewModel.updateOperation(operation.copy(imageUri = uri))
+                Toast.makeText(this@VideoEditingActivity, "Background removed", Toast.LENGTH_SHORT).show()
+            }.onFailure { error ->
+                Log.e(TAG, "Background removal failed", error)
+                Toast.makeText(this@VideoEditingActivity, error.message ?: "Could not remove background", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun showChromaKeyDialog() {
@@ -9862,6 +10271,7 @@ class VideoEditingActivity : AppCompatActivity() {
         popup.menu.add("Position")
         popup.menu.add("Opacity")
         if (op is EditOperation.AddImageOverlay) {
+            popup.menu.add("Rotation")
             val isVideo = op.fileDurationMs != null && op.fileDurationMs > 0
             if (isVideo) {
                 popup.menu.add("Speed")
@@ -9887,6 +10297,11 @@ class VideoEditingActivity : AppCompatActivity() {
             } else {
                 sliderLayout?.visibility = View.VISIBLE
                 when (activeKeyframeProperty) {
+                    "Rotation" -> {
+                        slider?.valueFrom = -180.0f
+                        slider?.valueTo = 180.0f
+                        slider?.stepSize = 1.0f
+                    }
                     "Opacity" -> {
                         slider?.valueFrom = 0.0f
                         slider?.valueTo = 100.0f
@@ -9943,6 +10358,15 @@ class VideoEditingActivity : AppCompatActivity() {
                             val existingIndex = currentList.indexOfFirst { Math.abs(it.timeMs - relativeTimeMs) < 150L }
                             if (existingIndex != -1) currentList.removeAt(existingIndex) else currentList.add(EditOperation.KeyframePoint(relativeTimeMs, op.relativeX, op.relativeY))
                             viewModel.updateOperation(op.copy(positionKeyframes = currentList))
+                        }
+                        "Rotation" -> {
+                            val currentList = op.rotationKeyframes.toMutableList()
+                            val existingIndex = currentList.indexOfFirst { Math.abs(it.timeMs - relativeTimeMs) < 150L }
+                            if (existingIndex != -1) currentList.removeAt(existingIndex) else {
+                                val value = interpolateKeyframes(currentList, relativeTimeMs, op.rotationAngle)
+                                currentList.add(EditOperation.KeyframePoint(relativeTimeMs, value))
+                            }
+                            viewModel.updateOperation(op.copy(rotationKeyframes = currentList))
                         }
                         "Opacity" -> {
                             val currentList = op.opacityKeyframes.toMutableList()
@@ -10100,6 +10524,14 @@ class VideoEditingActivity : AppCompatActivity() {
                         val relativeTimeMs = globalTimeMs - start
                         val mc = op.maskConfig
                         when (activeKeyframeProperty) {
+                            "Rotation" -> {
+                                val points = op.rotationKeyframes.toMutableList()
+                                val idx = points.indexOfFirst { kotlin.math.abs(it.timeMs - relativeTimeMs) < 150L }
+                                val point = EditOperation.KeyframePoint(relativeTimeMs, value)
+                                if (idx >= 0) points[idx] = point else points.add(point)
+                                viewModel.updateOperation(op.copy(rotationAngle = value, rotationKeyframes = points))
+                                draggableImageOverlay?.setRotationAngle(value)
+                            }
                             "Opacity" -> {
                                 val opacityValue = value / 100.0f
                                 val currentList = op.opacityKeyframes.toMutableList()
@@ -10221,6 +10653,7 @@ class VideoEditingActivity : AppCompatActivity() {
                         when (activeKeyframeProperty) {
                             "Position" -> op.positionKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
                             "Opacity" -> op.opacityKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
+                            "Rotation" -> op.rotationKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
                             "Speed" -> op.speedKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
                             "Mask Position" -> op.maskConfig.positionKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
                             "Mask Size" -> op.maskConfig.sizeKeyframes.any { Math.abs(it.timeMs - relativeTimeMs) < 150L }
@@ -10291,7 +10724,10 @@ class VideoEditingActivity : AppCompatActivity() {
                     } else {
                         op.opacity
                     }
-                    
+                    val interpolatedRotation = if (op.rotationKeyframes.isNotEmpty()) {
+                        interpolateKeyframes(op.rotationKeyframes, relativeTimeMs, op.rotationAngle)
+                    } else op.rotationAngle
+
                     val evaluatedMask = op.maskConfig.evaluatedAt(relativeTimeMs)
                     
                     draggableImageOverlay?.setProperties(
@@ -10299,14 +10735,18 @@ class VideoEditingActivity : AppCompatActivity() {
                         interpolatedPos.second,
                         op.relativeWidth,
                         op.relativeHeight,
-                        op.rotationAngle,
+                        interpolatedRotation,
                         interpolatedOpacity,
                         op.isMirrored
                     )
                     draggableImageOverlay?.maskConfig = evaluatedMask
                     draggableImageOverlay?.isMaskEditingMode = evaluatedMask.shape != EditOperation.MaskShape.NONE
 
-                    if (activeKeyframeProperty == "Opacity") {
+                    if (activeKeyframeProperty == "Rotation") {
+                        val value = interpolatedRotation.coerceIn(minVal, maxVal)
+                        slider?.value = value
+                        tvSliderValue?.text = "${value.toInt()}°"
+                    } else if (activeKeyframeProperty == "Opacity") {
                         val progress = (interpolatedOpacity * 100).toInt()
                         slider?.value = progress.toFloat().coerceIn(minVal, maxVal)
                         tvSliderValue?.text = "$progress%"

@@ -95,6 +95,8 @@ object ProjectSerializer {
                 "Transition" -> EditOperation.Transition::class.java
                 "MuteClip" -> EditOperation.MuteClip::class.java
                 "ColorFilter" -> EditOperation.ColorFilter::class.java
+                "TimelineFilter" -> EditOperation.TimelineFilter::class.java
+                "BlurRegion" -> EditOperation.BlurRegion::class.java
                 "AddBackgroundAudio" -> EditOperation.AddBackgroundAudio::class.java
                 "AddImageOverlay" -> EditOperation.AddImageOverlay::class.java
                 "AddSubtitles" -> EditOperation.AddSubtitles::class.java

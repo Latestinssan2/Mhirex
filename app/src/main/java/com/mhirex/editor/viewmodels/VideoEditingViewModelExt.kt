@@ -367,11 +367,12 @@ fun VideoEditingViewModel.deleteSequenceSegment(index: Int) {
 
 fun VideoEditingViewModel.setAdjust(
     index: Int, brightness: Int = 0, contrast: Int = 0, warmth: Int = 0, shadow: Int = 0,
-    highlights: Int = 0, saturation: Int = 0, exposure: Int = 0, sharpen: Int = 0, vignette: Int = 0
+    highlights: Int = 0, saturation: Int = 0, exposure: Int = 0, sharpen: Int = 0, vignette: Int = 0,
+    tint: Int = 0, blur: Int = 0, motionBlur: Int = 0
 ) {
     executeCommand(MutateListCommand("Adjust Visuals") { ops ->
         val existingIdx = ops.indexOfFirst { it is EditOperation.Adjust && it.index == index }
-        val newOp = EditOperation.Adjust(index, brightness, contrast, warmth, shadow, highlights, saturation, exposure, sharpen, vignette)
+        val newOp = EditOperation.Adjust(index = index, brightness = brightness, contrast = contrast, warmth = warmth, shadow = shadow, highlights = highlights, saturation = saturation, exposure = exposure, sharpen = sharpen, vignette = vignette, tint = tint, blur = blur, motionBlur = motionBlur)
         val newOps = ops.toMutableList()
         if (existingIdx != -1) {
             if (newOp.isDefault()) newOps.removeAt(existingIdx) else newOps[existingIdx] = newOp

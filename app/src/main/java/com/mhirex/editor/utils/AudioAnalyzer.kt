@@ -14,6 +14,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object AudioAnalyzer {
+    private val ffmpegExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     
     /**
      * Extracts PCM audio from the given Uri using FFmpeg and runs a simple energy-based
@@ -28,20 +29,32 @@ object AudioAnalyzer {
         val inputPath = FFmpegKitConfig.getSafParameterForRead(context, audioUri)
         val cmd = "-y -i \"$inputPath\" -f s16le -ac 1 -ar 8000 \"${pcmFile.absolutePath}\""
         
-        FFmpegKit.executeAsync(cmd, { session: FFmpegSession ->
-            if (ReturnCode.isSuccess(session.returnCode)) {
-                val beats = analyzePcmForBeats(pcmFile)
+        ffmpegExecutor.execute {
+            com.mhirex.editor.services.FFmpegExecutionCoordinator.semaphore.acquire()
+            try {
+                FFmpegKit.executeAsync(cmd, { session: FFmpegSession ->
+                    try {
+                        if (ReturnCode.isSuccess(session.returnCode)) {
+                            onComplete(analyzePcmForBeats(pcmFile))
+                        } else {
+                            onComplete(emptyList())
+                        }
+                    } finally {
+                        pcmFile.delete()
+                        com.mhirex.editor.services.FFmpegExecutionCoordinator.semaphore.release()
+                    }
+                }, { log: Log ->
+                    // Could parse progress if we wanted
+                }, { statistics: Statistics ->
+                    // Could parse time for progress
+                })
+            } catch (error: Throwable) {
                 pcmFile.delete()
-                onComplete(beats)
-            } else {
-                pcmFile.delete()
+                com.mhirex.editor.services.FFmpegExecutionCoordinator.semaphore.release()
+                android.util.Log.e("AudioAnalyzer", "Could not start FFmpeg beat analysis", error)
                 onComplete(emptyList())
             }
-        }, { log: Log ->
-            // Could parse progress if we wanted
-        }, { statistics: Statistics ->
-            // Could parse time for progress
-        })
+        }
     }
 
     private fun analyzePcmForBeats(pcmFile: File): List<Long> {

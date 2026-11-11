@@ -82,7 +82,7 @@
     <string name="str_settings">सेटिंग्स</string>
     <string name="str_general">सामान्य</string>
     <string name="str_export_folder">निर्यात फ़ोल्डर</string>
-    <string name="str_default_movies_mhirex">डिफ़ॉल्ट (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">डिफ़ॉल्ट (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">अपडेट की जाँच करें</string>
     <string name="str_manually_check_for_the_latest">नवीनतम संस्करण के लिए मैन्युअल रूप से जाँच करें</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

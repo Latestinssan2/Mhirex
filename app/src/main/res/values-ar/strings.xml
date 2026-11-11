@@ -82,7 +82,7 @@
     <string name="str_settings">الإعدادات</string>
     <string name="str_general">عام</string>
     <string name="str_export_folder">تصدير مجلد</string>
-    <string name="str_default_movies_mhirex">الافتراضي (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">الافتراضي (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">التحقق من التحديثات</string>
     <string name="str_manually_check_for_the_latest">تحقق يدوي من آخر نسخة</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

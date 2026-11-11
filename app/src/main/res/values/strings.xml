@@ -82,7 +82,7 @@
     <string name="str_settings">Settings</string>
     <string name="str_general">General</string>
     <string name="str_export_folder">Export Folder</string>
-    <string name="str_default_movies_mhirex">Default (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Default (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Check for Updates</string>
     <string name="str_manually_check_for_the_latest">Manually check for the latest version</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>
@@ -108,7 +108,7 @@
     <string name="str_about_open_github">Open the new GitHub repository</string>
     <string name="str_about_open_issues">Report a bug in the new repository</string>
     <string name="str_about_upstream_title">Open-source continuity</string>
-    <string name="str_about_upstream_body">Mhirex retains the original MIT license, source attribution and project history from LibreCuts.</string>
+    <string name="str_about_upstream_body">Mhirex is licensed under GNU GPL v3.0. The original LibreCuts MIT notice is preserved in the project license files.</string>
     <string name="str_onboarding_kicker">CREATED FROM AN IDEA • BUILT WITH PASSION</string>
     <string name="str_onboarding_welcome_title">Meet the people behind Mhirex</string>
     <string name="str_onboarding_welcome_body">A personal app, made with care from the first idea to every final export.</string>
@@ -120,7 +120,7 @@
     <string name="str_mhirex_is_open_source_help">Mhirex is open source. Help us improve by starring the project on GitHub or reporting bugs.</string>
     <!-- MIT requires the original copyright notice in all copies. str_made_by_tharun_birla is
          retained verbatim in every locale; this is the additive Mhirex attribution. -->
-    <string name="str_mhirex_based_on">Based on LibreCuts by Tharun Birla · MIT License</string>
+    <string name="str_mhirex_based_on">Based on LibreCuts by Tharun Birla · GPL v3.0</string>
     <string name="str_star_on_github">Star on GitHub</string>
     <string name="str_report_a_bug">Report a Bug</string>
     <!--

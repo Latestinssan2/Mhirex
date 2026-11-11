@@ -292,6 +292,8 @@ class FFmpegRenderEngine private constructor(private val context: Context) {
         totalDurationSecs: Double? = null,
         onProgress: ((Int) -> Unit)? = null
     ): RenderResult = withContext(Dispatchers.IO) {
+        FFmpegExecutionCoordinator.semaphore.acquire()
+        var coordinatorLockHeld = true
         var session: FFmpegSession? = null
         val cancellationRequested = AtomicBoolean(false)
         try {
@@ -402,6 +404,8 @@ class FFmpegRenderEngine private constructor(private val context: Context) {
                     val fallbackCommand = command.replace("h264_mediacodec", "libx264")
                     unregisterSession(completedSession.sessionId)
                     session = null
+                    coordinatorLockHeld = false
+                    FFmpegExecutionCoordinator.semaphore.release()
                     return@withContext executeTrackedCommand(
                         command = fallbackCommand,
                         isRetry = true,
@@ -415,6 +419,8 @@ class FFmpegRenderEngine private constructor(private val context: Context) {
                         .replace("libx264", "h264_mediacodec")
                     unregisterSession(completedSession.sessionId)
                     session = null
+                    coordinatorLockHeld = false
+                    FFmpegExecutionCoordinator.semaphore.release()
                     return@withContext executeTrackedCommand(
                         command = fallbackCommand,
                         isRetry = true,
@@ -439,6 +445,7 @@ class FFmpegRenderEngine private constructor(private val context: Context) {
             if (!cancellationRequested.get()) {
                 session?.let { unregisterSession(it.sessionId) }
             }
+            if (coordinatorLockHeld) FFmpegExecutionCoordinator.semaphore.release()
         }
     }
 

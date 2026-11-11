@@ -302,6 +302,28 @@ sealed class EditOperation : Serializable {
         val id: String = System.nanoTime().toString()
     ) : EditOperation()
 
+    /** Applies a grade to the fully composited timeline only during the selected range. */
+    data class TimelineFilter(
+        val filterName: String,
+        val startTimeMs: Long,
+        val endTimeMs: Long,
+        val id: String = System.nanoTime().toString()
+    ) : EditOperation()
+
+    /** Blur a customizable rectangle or ellipse on one timeline clip. */
+    data class BlurRegion(
+        val index: Int,
+        val startTimeMs: Long,
+        val endTimeMs: Long,
+        val centerX: Float = 0.5f,
+        val centerY: Float = 0.5f,
+        val width: Float = 0.3f,
+        val height: Float = 0.3f,
+        val amount: Int = 35,
+        val shape: String = "rectangle",
+        val id: String = System.nanoTime().toString()
+    ) : EditOperation()
+
     
     /**
      * Add background audio operation: Overlays an audio file over the video.
@@ -391,6 +413,9 @@ sealed class EditOperation : Serializable {
         val exposure: Int = 0,
         val sharpen: Int = 0,
         val vignette: Int = 0,
+        val tint: Int = 0,
+        val blur: Int = 0,
+        val motionBlur: Int = 0,
         val id: String = System.nanoTime().toString()
     ) : EditOperation() {
         fun isDefault(): Boolean {
@@ -402,7 +427,10 @@ sealed class EditOperation : Serializable {
                    saturation == 0 &&
                    exposure == 0 &&
                    sharpen == 0 &&
-                   vignette == 0
+                   vignette == 0 &&
+                   tint == 0 &&
+                   blur == 0 &&
+                   motionBlur == 0
         }
     }
 
@@ -488,6 +516,8 @@ val EditOperation.id: String
         is EditOperation.Transition -> id
         is EditOperation.MuteClip -> id
         is EditOperation.ColorFilter -> id
+        is EditOperation.TimelineFilter -> id
+        is EditOperation.BlurRegion -> id
         is EditOperation.AddBackgroundAudio -> id
         is EditOperation.AddImageOverlay -> id
         is EditOperation.AddSubtitles -> id

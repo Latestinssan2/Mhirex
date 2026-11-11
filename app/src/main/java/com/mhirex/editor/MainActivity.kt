@@ -11,6 +11,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -18,6 +21,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import android.widget.LinearLayout
+import android.widget.ImageView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -38,6 +42,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -52,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private var aboutAmbientAnimator: Animator? = null
     private var selectedCanvasWidth = 1080
     private var selectedCanvasHeight = 1920
+    private val projectPreviewCache = mutableMapOf<String, Bitmap?>()
     private val selectVideoLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri != null) {
@@ -146,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        renderRecentProjects()
 
         binding.btnImport.setBounceClickListener {
             Log.d("ButtonClick", "Launching video selection.")
@@ -723,6 +730,153 @@ class MainActivity : AppCompatActivity() {
             .setNegativeButton("Cancel", null)
             .show()
     }
+
+    override fun onResume() {
+        super.onResume()
+        if (::binding.isInitialized) renderRecentProjects()
+    }
+
+    private fun renderRecentProjects() {
+        val container = binding.root.findViewById<LinearLayout>(R.id.recentProjectsList) ?: return
+        container.removeAllViews()
+        val folder = File(filesDir, "projects")
+        val projects = folder.listFiles { file -> file.isFile && file.extension.equals("lcprj", true) }
+            ?.sortedByDescending { it.lastModified() }.orEmpty().take(8)
+        if (projects.isEmpty()) {
+            container.addView(TextView(this).apply {
+                text = "Projects save automatically as you edit."
+                setTextColor(getColor(R.color.iconSecondary))
+                textSize = 13f
+                setPadding(0, 0, 0, 12.dp())
+            })
+            return
+        }
+        projects.forEach { file ->
+            val projectJson = runCatching { JSONObject(file.readText()) }.getOrNull()
+            val sourceName = projectJson?.optString("sourceName").orEmpty()
+            val projectName = projectJson?.optString("projectName").orEmpty()
+                .ifBlank { sourceName.substringBeforeLast('.', sourceName) }
+                .ifBlank { file.nameWithoutExtension }
+            val cacheKey = "${file.absolutePath}:${file.lastModified()}"
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(10.dp(), 10.dp(), 14.dp(), 10.dp())
+                background = getDrawable(R.drawable.bg_aspect_ratio_item)
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    val projectUri = Uri.fromFile(file)
+                    startActivity(Intent(this@MainActivity, VideoEditingActivity::class.java).apply {
+                        putExtra("PROJECT_URI", projectUri)
+                        data = projectUri
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    })
+                }
+            }
+            val preview = ImageView(this).apply {
+                layoutParams = LinearLayout.LayoutParams(68.dp(), 68.dp())
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = getDrawable(R.drawable.bg_aspect_ratio_item)
+                clipToOutline = true
+                setImageResource(R.drawable.brand_logo)
+                imageAlpha = 150
+                tag = cacheKey
+            }
+            row.addView(preview)
+
+            val details = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(12.dp(), 0, 0, 0)
+            }
+            details.addView(TextView(this).apply {
+                text = projectName
+                textSize = 15f
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(getColor(R.color.textColor))
+                typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            })
+            details.addView(TextView(this).apply {
+                text = android.text.format.DateUtils.getRelativeTimeSpanString(file.lastModified())
+                textSize = 12f
+                setTextColor(getColor(R.color.iconSecondary))
+                setPadding(0, 3.dp(), 0, 0)
+            })
+            row.addView(details, LinearLayout.LayoutParams(0, -2, 1f))
+            container.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = 8.dp() })
+
+            val cachedPreview = projectPreviewCache[cacheKey]
+            if (cachedPreview != null) {
+                preview.setImageBitmap(cachedPreview)
+                preview.imageAlpha = 255
+            } else {
+                lifecycleScope.launch {
+                    val bitmap = withContext(Dispatchers.IO) {
+                        loadProjectPreview(projectJson)
+                    }
+                    if (bitmap != null && preview.tag == cacheKey) {
+                        projectPreviewCache[cacheKey] = bitmap
+                        preview.setImageBitmap(bitmap)
+                        preview.imageAlpha = 255
+                    }
+                }
+            }
+        }
+    }
+
+    private fun loadProjectPreview(projectJson: JSONObject?): Bitmap? {
+        val source = projectJson?.optString("sourceUri")?.takeIf { it.isNotBlank() } ?: return null
+        val uri = runCatching { Uri.parse(source) }.getOrNull() ?: return null
+        val sourceName = projectJson.optString("sourceName", uri.lastPathSegment.orEmpty())
+        val imageSource = sourceName.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "bmp", "heic")
+
+        if (imageSource) {
+            val bitmap = runCatching {
+                val options = BitmapFactory.Options().apply { inSampleSize = 4 }
+                if (uri.scheme == "content" || uri.scheme == "android.resource") {
+                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) }
+                } else {
+                    val path = if (uri.scheme == "file") uri.path else source
+                    path?.let { BitmapFactory.decodeFile(it, options) }
+                }
+            }.getOrNull()
+            return bitmap?.let(::fitProjectPreview)
+        }
+
+        val retriever = MediaMetadataRetriever()
+        return try {
+            if (uri.scheme == "content" || uri.scheme == "android.resource") {
+                retriever.setDataSource(this, uri)
+            } else {
+                val path = if (uri.scheme == "file") uri.path else source
+                retriever.setDataSource(path)
+            }
+            retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let(::fitProjectPreview)
+        } catch (e: Exception) {
+            Log.d("RecentProjects", "Could not load preview for ${uri}: ${e.message}")
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
+    private fun fitProjectPreview(bitmap: Bitmap): Bitmap {
+        val maxDimension = 320
+        val ratio = minOf(1f, maxDimension.toFloat() / maxOf(bitmap.width, bitmap.height))
+        if (ratio >= 1f) return bitmap
+        val scaled = Bitmap.createScaledBitmap(
+            bitmap,
+            (bitmap.width * ratio).toInt().coerceAtLeast(1),
+            (bitmap.height * ratio).toInt().coerceAtLeast(1),
+            true
+        )
+        if (scaled !== bitmap) bitmap.recycle()
+        return scaled
+    }
+
+    private fun Int.dp(): Int = (this * resources.displayMetrics.density).toInt()
 
     private fun navigateToEditingScreen(videoUri: Uri) {
         Log.d("Navigation", "Navigating to editing screen with URI: $videoUri")

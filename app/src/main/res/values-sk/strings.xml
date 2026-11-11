@@ -54,7 +54,7 @@
     <string name="str_settings">Nastavenia</string>
     <string name="str_general">Všeobecné</string>
     <string name="str_export_folder">Priečinok na export</string>
-    <string name="str_default_movies_mhirex">Predvolené (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Predvolené (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Skontrolovať dostupnosť aktualizácií</string>
     <string name="str_manually_check_for_the_latest">Manuálne skontrolovať, či je k dispozícii najnovšia verzia</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

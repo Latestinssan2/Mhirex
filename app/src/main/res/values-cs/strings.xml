@@ -82,7 +82,7 @@
     <string name="str_settings">Nastavení</string>
     <string name="str_general">Obecné</string>
     <string name="str_export_folder">Složka pro export</string>
-    <string name="str_default_movies_mhirex">Výchozí (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Výchozí (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Zkontrolovat aktualizace</string>
     <string name="str_manually_check_for_the_latest">Ručně zkontrolovat nejnovější verzi</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

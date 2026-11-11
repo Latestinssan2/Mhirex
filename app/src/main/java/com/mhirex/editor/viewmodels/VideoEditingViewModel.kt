@@ -12,6 +12,7 @@ import com.mhirex.editor.models.EditRecipe
 import com.mhirex.editor.models.TextPosition
 import com.mhirex.editor.models.VideoEditingUiState
 import com.mhirex.editor.models.VideoProject
+import com.mhirex.editor.models.id
 import com.mhirex.editor.utils.MediaTypeResolver
 import com.mhirex.editor.utils.OverlayMediaType
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -270,6 +271,10 @@ class VideoEditingViewModel : ViewModel() {
         textOverride: String = op.text,
         enableOverride: String? = null
     ): String {
+        // The animated birthday title's nested time-based fontsize/alpha expressions crash the
+        // bundled FFmpeg 8 filter graph on Android 16 before it can produce the first frame.
+        // Keep the title visible for its timeline range with stable drawtext parameters.
+        val stableTemplateTitle = op.id.startsWith("template_birthday_title_")
         val escapedText = textOverride
             .replace("\\", "\\\\")
             .replace("'", "\\\\'")
@@ -300,7 +305,7 @@ class VideoEditingViewModel : ViewModel() {
 
         val enablePart = enableOverride ?: buildEnableExpr(op.startTimeMs, op.endTimeMs)
         
-        val alphaPart = if (op.opacityKeyframes.isNotEmpty()) {
+        val alphaPart = if (!stableTemplateTitle && op.opacityKeyframes.isNotEmpty()) {
             val alphaExpr = buildFFmpegInterpolationExpr(op.opacityKeyframes, useValueY = false, defaultValue = op.opacity, startTimeMs = op.startTimeMs ?: 0L)
             ":alpha='$alphaExpr'"
         } else if (op.opacity < 1.0f) {
@@ -311,7 +316,7 @@ class VideoEditingViewModel : ViewModel() {
         val borderPart = if (op.borderThickness > 0) ":borderw=${op.borderThickness}:bordercolor='${formatColorForFFmpeg(op.borderColor)}'" else ""
         val alignPart = if (op.textAlign.isNotEmpty()) ":text_align=${op.textAlign}" else ""
         val lineSpacingPart = if (op.lineSpacing != 0f) ":line_spacing=${op.lineSpacing.toInt()}" else ""
-        val sizePart = if (op.scaleKeyframes.isNotEmpty()) {
+        val sizePart = if (!stableTemplateTitle && op.scaleKeyframes.isNotEmpty()) {
             val scaleExpr = buildFFmpegInterpolationExpr(op.scaleKeyframes, false, 1f, op.startTimeMs ?: 0L)
             "'${op.fontSize}*($scaleExpr)'"
         } else op.fontSize.toString()
@@ -493,7 +498,23 @@ class VideoEditingViewModel : ViewModel() {
             filters.add("unsharp=luma_amount=$amt")
         }
 
-        // 6. vignette
+        // 6. tint, positive magenta and negative green
+        if (op.tint != 0) {
+            val tint = (op.tint / 100.0) * 0.35
+            filters.add("colorbalance=rs=$tint:gs=${-tint}:bs=$tint:rm=$tint:gm=${-tint}:bm=$tint:rh=$tint:gh=${-tint}:bh=$tint")
+        }
+
+        // 7. blur and motion blur
+        if (op.blur != 0) {
+            val radius = (kotlin.math.abs(op.blur) / 12).coerceAtLeast(1)
+            filters.add("boxblur=$radius:1")
+        }
+        if (op.motionBlur != 0) {
+            val frames = (1 + kotlin.math.abs(op.motionBlur) / 25).coerceIn(2, 5)
+            filters.add("tmix=frames=$frames")
+        }
+
+        // 8. vignette
         if (op.vignette != 0) {
             val angle = 1.5 - (op.vignette / 100.0) * 0.9
             filters.add("vignette=angle=$angle")
@@ -512,6 +533,15 @@ class VideoEditingViewModel : ViewModel() {
             "vignette" -> "vignette"
             "negative" -> "curves=preset=negative"
             "crossprocess" -> "curves=preset=cross_process"
+            "cinematic" -> "eq=contrast=1.18:saturation=0.82:gamma=0.96,colorbalance=bs=0.08:bm=0.06:rh=0.04"
+            "sepia" -> "colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131"
+            "faded" -> "eq=contrast=0.88:brightness=0.035:saturation=0.85"
+            "dramatic" -> "eq=contrast=1.35:saturation=1.12,unsharp=5:5:0.5"
+            "golden" -> "colorbalance=rs=0.12:gs=0.04:bs=-0.12:rm=0.1:bm=-0.08"
+            "dreamy" -> "gblur=sigma=0.7,eq=brightness=0.04:saturation=0.9"
+            "cartoon" -> "smartblur=lr=2:ls=-0.5:lt=0.0,eq=saturation=1.3:contrast=1.18,lutrgb=r='floor(val/48)*48':g='floor(val/48)*48':b='floor(val/48)*48'"
+            "pastel" -> "eq=saturation=0.72:contrast=0.9:brightness=0.04"
+            "noir" -> "hue=s=0,eq=contrast=1.28:brightness=-0.02"
             else -> null
         }
     }
@@ -558,7 +588,6 @@ class VideoEditingViewModel : ViewModel() {
                         } else op.rotationAngle.toString()
                         val radiansExpr = "(($rotationDegreesExpr)*PI/180)"
                         val scaledImgLabel = "[scaled_img_$stageIndex]"
-                        val refVidLabel = "[ref_vid_$stageIndex]"
                         val rotatedImgLabel = "[rotated_img_$stageIndex]"
                         val nextLabel = "[v$stageIndex]"
 
@@ -583,18 +612,19 @@ class VideoEditingViewModel : ViewModel() {
                             }
                             val safeSpeedExpr = "if(gt($speedExpr,0.1),$speedExpr,0.1)"
                             stages.add("[$imageInputIndex:v]setpts='(PTS-STARTPTS)/($safeSpeedExpr)+${startSec}/TB',format=rgba$mirrorStr$ptsLabel")
-                            stages.add("${ptsLabel}${currentLabel}scale2ref=w=iw*${op.relativeWidth}*($overlayScaleExpr):h=ih*${op.relativeHeight}*($overlayScaleExpr):eval=frame${scaledImgLabel}${refVidLabel}")
+                            // Scale the overlay on its own. The overlay filter synchronizes it to
+                            // the base stream; routing the base through scale2ref (or scale's
+                            // secondary reference input) crashes FFmpeg 8 on some Android builds.
+                            stages.add("${ptsLabel}scale=w=iw*${op.relativeWidth}*($overlayScaleExpr):h=ih*${op.relativeHeight}*($overlayScaleExpr):eval=frame${scaledImgLabel}")
                         } else {
                             val rgbaImgLabel = "[rgba_img_$stageIndex]"
                             val mirrorStr = if (op.isMirrored) ",hflip" else ""
-                            val hasMaskKeyframes = op.maskConfig.positionKeyframes.isNotEmpty() || op.maskConfig.sizeKeyframes.isNotEmpty() || op.maskConfig.rotationKeyframes.isNotEmpty() || op.maskConfig.featherKeyframes.isNotEmpty()
-                            if (op.opacityKeyframes.isNotEmpty() || hasMaskKeyframes || op.positionKeyframes.isNotEmpty() || op.scaleKeyframes.isNotEmpty() || op.rotationKeyframes.isNotEmpty()) {
-                                // Static image: convert to video stream so geq's T variable advances
-                                stages.add("[$imageInputIndex:v]format=rgba$mirrorStr,loop=loop=-1:size=1:start=0,fps=25$rgbaImgLabel")
-                            } else {
-                                stages.add("[$imageInputIndex:v]format=rgba$mirrorStr$rgbaImgLabel")
-                            }
-                            stages.add("${rgbaImgLabel}${currentLabel}scale2ref=w=iw*${op.relativeWidth}*($overlayScaleExpr):h=ih*${op.relativeHeight}*($overlayScaleExpr):eval=frame${scaledImgLabel}${refVidLabel}")
+                            // Still images are looped at input level so libavfilter always receives
+                            // a live frame source. The loop filter can leave an empty buffersrc
+                            // when a one-frame PNG reaches EOF on FFmpeg 8.
+                            stages.add("[$imageInputIndex:v]format=rgba$mirrorStr$rgbaImgLabel")
+                            // Scale the overlay independently and let overlay handle frame sync.
+                            stages.add("${rgbaImgLabel}scale=w=iw*${op.relativeWidth}*($overlayScaleExpr):h=ih*${op.relativeHeight}*($overlayScaleExpr):eval=frame${scaledImgLabel}")
                         }
 
                         var currentOverlayLabel = scaledImgLabel
@@ -649,8 +679,10 @@ class VideoEditingViewModel : ViewModel() {
                         stages.add("${currentOverlayLabel}rotate='$radiansExpr':c=none:ow='rotw($radiansExpr)':oh='roth($radiansExpr)'${rotatedImgLabel}")
                         // Overlay image/video on the reference video
                         val enablePart = buildEnableExpr(op.startTimeMs, op.endTimeMs)
-                        val hasMaskKfs = op.maskConfig.positionKeyframes.isNotEmpty() || op.maskConfig.sizeKeyframes.isNotEmpty() || op.maskConfig.rotationKeyframes.isNotEmpty() || op.maskConfig.featherKeyframes.isNotEmpty()
-                        val shortestPart = if (((isGif || isVideo) && op.isLooping) || (!isGif && !isVideo && (op.opacityKeyframes.isNotEmpty() || hasMaskKfs))) ":shortest=1" else ""
+                        // Still images are looped at input level so their stream stays valid for
+                        // FFmpeg 8. End overlay output when the base video ends, or the infinite
+                        // image stream would keep the render running forever.
+                        val shortestPart = if (((isGif || isVideo) && op.isLooping) || (!isGif && !isVideo)) ":shortest=1" else ""
                         
                         val overlayX = if (op.positionKeyframes.isNotEmpty()) {
                             val xExpr = buildFFmpegInterpolationExpr(op.positionKeyframes, useValueY = false, defaultValue = op.relativeX, startTimeMs = op.startTimeMs ?: 0L)
@@ -665,7 +697,7 @@ class VideoEditingViewModel : ViewModel() {
                             "y='(H*${op.relativeY})-(h/2)'"
                         }
                         
-                        stages.add("${refVidLabel}${rotatedImgLabel}overlay=$overlayX:$overlayY${shortestPart}${enablePart}${nextLabel}")
+                        stages.add("${currentLabel}${rotatedImgLabel}overlay=$overlayX:$overlayY${shortestPart}${enablePart}${nextLabel}")
 
                         currentLabel = nextLabel
                         stageIndex++
@@ -743,6 +775,45 @@ class VideoEditingViewModel : ViewModel() {
                 currentLabel = nextLabel
                 stageIndex++
             }
+        }
+
+        // Blur a bounded timeline region while preserving the untouched pixels around it.
+        for (op in operations.filterIsInstance<EditOperation.BlurRegion>()) {
+            val nextLabel = "[v$stageIndex]"
+            val baseLabel = "[blur_base_$stageIndex]"
+            val blurSourceLabel = "[blur_source_$stageIndex]"
+            val maskSourceLabel = "[blur_mask_source_$stageIndex]"
+            val blurredLabel = "[blurred_$stageIndex]"
+            val maskLabel = "[blur_mask_$stageIndex]"
+            val radius = (op.amount / 7).coerceIn(1, 14)
+            val cx = op.centerX.coerceIn(0f, 1f)
+            val cy = op.centerY.coerceIn(0f, 1f)
+            val rw = op.width.coerceIn(0.03f, 1f)
+            val rh = op.height.coerceIn(0.03f, 1f)
+            val start = op.startTimeMs.coerceAtLeast(0L) / 1000.0
+            val end = op.endTimeMs.coerceAtLeast(op.startTimeMs) / 1000.0
+            val inside = if (op.shape.equals("ellipse", true)) {
+                "lte(pow((X-W*$cx)/(W*${rw / 2f}),2)+pow((Y-H*$cy)/(H*${rh / 2f}),2),1)"
+            } else {
+                "gte(X\\,W*($cx-$rw/2))*lte(X\\,W*($cx+$rw/2))*gte(Y\\,H*($cy-$rh/2))*lte(Y\\,H*($cy+$rh/2))"
+            }
+            stages.add("$currentLabel" + "split=3$baseLabel$blurSourceLabel$maskSourceLabel")
+            stages.add("${blurSourceLabel}boxblur=$radius:1${blurredLabel}")
+            stages.add("${maskSourceLabel}format=gray,geq=lum='if(between(T\\,$start\\,$end)*($inside)\\,255\\,0)'$maskLabel")
+            stages.add("${baseLabel}${blurredLabel}${maskLabel}maskedmerge$nextLabel")
+            currentLabel = nextLabel
+            stageIndex++
+        }
+
+        // Apply timeline grades after compositing so every image, sticker, and text layer is included.
+        for (op in operations.filterIsInstance<EditOperation.TimelineFilter>()) {
+            val filter = getFFmpegFilterForName(op.filterName) ?: continue
+            val start = (op.startTimeMs.coerceAtLeast(0L)) / 1000.0
+            val end = (op.endTimeMs.coerceAtLeast(op.startTimeMs)) / 1000.0
+            val nextLabel = "[v$stageIndex]"
+            stages.add("$currentLabel$filter:enable='between(t\\,$start\\,$end)'$nextLabel")
+            currentLabel = nextLabel
+            stageIndex++
         }
 
         return Pair(stages, currentLabel)
@@ -831,7 +902,13 @@ class VideoEditingViewModel : ViewModel() {
         val trimOp = operations.filterIsInstance<EditOperation.Trim>().lastOrNull()
         val audioOps = operations.filterIsInstance<EditOperation.AddBackgroundAudio>()
         val audioMuted = operations.any { it is EditOperation.MuteAudio }
-        val videoOps = nonMergeOps.filter { it is EditOperation.Crop || it is EditOperation.AddText || it is EditOperation.AddImageOverlay || it is EditOperation.AddSubtitles }
+        // Template compositions combine multiple image and text filters. Use the software encoder
+        // for these graphs: the Android MediaCodec encoder can segfault while draining avfilter on
+        // Android 16, taking the whole editor process down instead of returning a render failure.
+        val isTemplateComposition = operations.any { op ->
+            op.id.startsWith("template_birthday_") || op.id.startsWith("template_death_")
+        }
+        val videoOps = nonMergeOps.filter { it is EditOperation.Crop || it is EditOperation.AddText || it is EditOperation.AddImageOverlay || it is EditOperation.AddSubtitles || it is EditOperation.TimelineFilter || it is EditOperation.BlurRegion }
         val imageOps = operations.filterIsInstance<EditOperation.AddImageOverlay>()
 
         // ── Unified Input Indexing ────────────────────────────────────────────
@@ -852,8 +929,24 @@ class VideoEditingViewModel : ViewModel() {
                         }
                     }
                 }
+                "android.resource" -> {
+                    val cached = generatedUriPathCache[uri]
+                    if (cached != null && File(cached).isFile) {
+                        cached
+                    } else {
+                        context?.let { copyAndroidResourceToTempFile(it, uri) }?.also { path ->
+                            generatedUriPathCache[uri] = path
+                        }
+                    }
+                }
                 "file" -> uri.path?.takeIf { File(it).canRead() }
-                else -> uri.path?.takeIf { it.isNotBlank() }
+                null -> {
+                    val legacyResourceId = uri.path?.trim('/')?.toIntOrNull()
+                    if (legacyResourceId != null && context != null) {
+                        context.let { copyAndroidResourceToTempFile(it, Uri.parse("android.resource://${it.packageName}/$legacyResourceId")) }
+                    } else uri.path?.takeIf { it.isNotBlank() && File(it).canRead() }
+                }
+                else -> uri.path?.takeIf { it.isNotBlank() && File(it).canRead() }
             }
         }
 
@@ -968,7 +1061,7 @@ class VideoEditingViewModel : ViewModel() {
             if (shouldStreamLoop) {
                 cmd.append(" -stream_loop -1 -i \"$imagePath\"")
             } else {
-                cmd.append(" -i \"$imagePath\"")
+                cmd.append(" -loop 1 -i \"$imagePath\"")
             }
             imageInputIndices.add(Pair(inputIndex, imageOp))
             inputIndex++
@@ -1421,7 +1514,7 @@ class VideoEditingViewModel : ViewModel() {
             if (_exportAudioOnly.value) {
                 filterParts.add("${finalVideoLabel}nullsink")
             }
-            cmd.append(" -filter_complex \"${filterParts.joinToString(";")}\"")
+            cmd.append(" -filter_complex_threads 1 -filter_threads 1 -filter_complex \"${filterParts.joinToString(";")}\"")
             
             if (_exportAudioOnly.value) {
                 if (!audioMuted) {
@@ -1449,7 +1542,7 @@ class VideoEditingViewModel : ViewModel() {
                 }
                 val defaultEncoder = context?.getSharedPreferences(Branding.PREFS_NAME, Context.MODE_PRIVATE)
                     ?.getString("default_encoder", "hardware") ?: "hardware"
-                val videoCodec = if (defaultEncoder == "software") "-c:v libx264 -pix_fmt yuv420p" else "-c:v h264_mediacodec -pix_fmt yuv420p -b:v $bitrate"
+                val videoCodec = if (defaultEncoder == "software" || isTemplateComposition) "-c:v libx264 -pix_fmt yuv420p -threads 2 -preset ultrafast" else "-c:v h264_mediacodec -pix_fmt yuv420p -b:v $bitrate"
                 cmd.append(" $videoCodec")
                 
                 if (!audioMuted) {
@@ -1660,7 +1753,7 @@ class VideoEditingViewModel : ViewModel() {
                 filterComplexParts.add("${mappedVideoLabel}nullsink")
             }
             
-            cmd.append(" -filter_complex \"${filterComplexParts.joinToString(";")}\"")
+            cmd.append(" -filter_complex_threads 1 -filter_threads 1 -filter_complex \"${filterComplexParts.joinToString(";")}\"")
 
             if (!_exportAudioOnly.value) {
                 if (hasVideoFilters) {
@@ -1705,7 +1798,7 @@ class VideoEditingViewModel : ViewModel() {
             }
             val defaultEncoder = context?.getSharedPreferences(Branding.PREFS_NAME, Context.MODE_PRIVATE)
                 ?.getString("default_encoder", "hardware") ?: "hardware"
-            val videoCodec = if (defaultEncoder == "software") "-c:v libx264 -pix_fmt yuv420p" else "-c:v h264_mediacodec -pix_fmt yuv420p -b:v $bitrate"
+            val videoCodec = if (defaultEncoder == "software" || isTemplateComposition) "-c:v libx264 -pix_fmt yuv420p -threads 2 -preset ultrafast" else "-c:v h264_mediacodec -pix_fmt yuv420p -b:v $bitrate"
             // If there are no video filters, we still need to apply the scale and fps output params
             if (!hasVideoFilters) {
                 cmd.append(" $videoCodec -vf scale=-2:${_exportResolution.value} -r ${_exportFps.value}")
@@ -1771,7 +1864,7 @@ class VideoEditingViewModel : ViewModel() {
             sourceVideoHeight = 1080
         )
         if (videoStages.isNotEmpty()) {
-            cmd.append(" -filter_complex \"${videoStages.joinToString(";")}\"")
+            cmd.append(" -filter_complex_threads 1 -filter_threads 1 -filter_complex \"${videoStages.joinToString(";")}\"")
             cmd.append(" -map \"$finalLabel\" -map 0:a?")
         }
 
@@ -1820,6 +1913,46 @@ class VideoEditingViewModel : ViewModel() {
             tempFile?.let { generatedInputFiles -= it }
             tempFile?.let { if (it.exists() && !it.delete()) Log.w(TAG, "Could not delete partial input: $it") }
             Log.e(TAG, "Failed to copy content URI $uri: ${e.message}")
+            null
+        }
+    }
+
+    /** Android resource URIs are valid for native playback but FFmpeg needs a file path. */
+    private fun copyAndroidResourceToTempFile(context: Context, uri: Uri): String? {
+        var tempFile: File? = null
+        return try {
+            val pathSegments = uri.pathSegments
+            val authority = uri.authority ?: context.packageName
+            val resourceId = uri.lastPathSegment?.toIntOrNull()
+                ?: if (pathSegments.size >= 2) context.resources.getIdentifier(
+                    pathSegments.last(), pathSegments[pathSegments.lastIndex - 1], authority
+                ) else 0
+            if (resourceId == 0) throw java.io.IOException("Invalid Android resource URI: $uri")
+            val resourceType = context.resources.getResourceTypeName(resourceId)
+            val extension = when (resourceType) {
+                "raw" -> context.resources.getResourceEntryName(resourceId).let { name ->
+                    when {
+                        name.endsWith(".mp3", true) -> ".mp3"
+                        name.endsWith(".m4a", true) -> ".m4a"
+                        else -> ".wav"
+                    }
+                }
+                "drawable", "mipmap" -> ".png"
+                else -> ".bin"
+            }
+            val destination = File.createTempFile("mhirex_resource_", extension, context.cacheDir)
+            tempFile = destination
+            generatedInputFiles += destination
+            val input = if (resourceType == "raw") context.resources.openRawResource(resourceId)
+                else context.contentResolver.openInputStream(uri)
+                ?: throw java.io.IOException("Could not read Android resource: $uri")
+            input.use { stream -> FileOutputStream(destination).use { stream.copyTo(it) } }
+            if (destination.length() <= 0L) throw java.io.IOException("Android resource was empty: $uri")
+            destination.absolutePath
+        } catch (e: Exception) {
+            tempFile?.let { generatedInputFiles -= it }
+            tempFile?.let { if (it.exists() && !it.delete()) Log.w(TAG, "Could not delete partial resource: $it") }
+            Log.e(TAG, "Failed to copy Android resource $uri: ${e.message}")
             null
         }
     }

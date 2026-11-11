@@ -77,7 +77,7 @@
     <string name="str_settings">Instellingen</string>
     <string name="str_general">Algemeen</string>
     <string name="str_export_folder">Exportmap</string>
-    <string name="str_default_movies_mhirex">Standaard (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Standaard (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Controleren op updates</string>
     <string name="str_manually_check_for_the_latest">Handmatig op updates controleren</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>

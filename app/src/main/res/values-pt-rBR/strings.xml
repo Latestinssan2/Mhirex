@@ -82,7 +82,7 @@
     <string name="str_settings">Configurações</string>
     <string name="str_general">Geral</string>
     <string name="str_export_folder">Exportar Pasta</string>
-    <string name="str_default_movies_mhirex">Padrão (Movies/Mhirex)</string>
+    <string name="str_default_movies_mhirex">Padrão (DCIM/Mhirex)</string>
     <string name="str_check_for_updates">Verificar Atualizações</string>
     <string name="str_manually_check_for_the_latest">Verifique manualmente se existe uma versão mais recente</string>
     <string name="str_v1_0_beta4">v1.0-beta5</string>
