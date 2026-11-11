@@ -5,6 +5,14 @@ plugins {
 
 apply plugin: 'com.mikepenz.aboutlibraries.plugin'
 
+def localConfig = new Properties()
+def localConfigFile = rootProject.file('local.properties')
+if (localConfigFile.exists()) {
+    localConfigFile.withInputStream { localConfig.load(it) }
+}
+def pixabayKey = (localConfig.getProperty('pixabayApiKey', '') ?: '')
+        .replace('\\', '\\\\').replace('"', '\\"')
+
 // Google Services / Firebase.
 //
 // Requires app/google-services.json to exist, which is gitignored and therefore absent from a clean
@@ -40,10 +48,11 @@ android {
         // v1.0-beta9 shipped base 11, i.e. per-ABI 11/12/13. Bumping the base by 1 would have left
         // armeabi-v7a installs (which are on 11) with nothing higher than what they already have,
         // and Android silently refuses such an "upgrade". Base 14 gives 14/15/16, clear of all three.
-        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 14
-        versionName "1.0-beta10"
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 15
+        versionName "1.0-beta11"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "PIXABAY_API_KEY", "\"${pixabayKey}\""
         vectorDrawables {
             useSupportLibrary true
         }
@@ -70,6 +79,7 @@ android {
     }
     buildFeatures {
         viewBinding true
+        buildConfig true
     }
 
     packaging {
@@ -146,4 +156,5 @@ dependencies {
     androidTestImplementation libs.androidx.junit
     androidTestImplementation libs.androidx.espresso.core
     implementation 'com.google.code.gson:gson:2.10.1'
+    implementation 'com.google.mediapipe:tasks-vision:1.2.2'
 }

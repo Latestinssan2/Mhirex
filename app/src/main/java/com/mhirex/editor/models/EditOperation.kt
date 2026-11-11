@@ -102,7 +102,9 @@ sealed class EditOperation : Serializable {
         val letterSpacing: Float = 0f,
         val lineSpacing: Float = 0f,
         val positionKeyframes: List<KeyframePoint> = emptyList(),
-        val opacityKeyframes: List<KeyframePoint> = emptyList()
+        val opacityKeyframes: List<KeyframePoint> = emptyList(),
+        val scaleKeyframes: List<KeyframePoint> = emptyList(),
+        val animationPreset: String = "None"
     ) : EditOperation() {
         init {
             require(text.isNotEmpty()) { "Text cannot be empty" }
@@ -349,7 +351,10 @@ sealed class EditOperation : Serializable {
         val positionKeyframes: List<KeyframePoint> = emptyList(),
         val opacityKeyframes: List<KeyframePoint> = emptyList(),
         val speedKeyframes: List<KeyframePoint> = emptyList(),
-        val maskConfig: MaskConfig = MaskConfig()
+        val scaleKeyframes: List<KeyframePoint> = emptyList(),
+        val rotationKeyframes: List<KeyframePoint> = emptyList(),
+        val maskConfig: MaskConfig = MaskConfig(),
+        val animationPreset: String = "None"
     ) : EditOperation()
 
     data class AddSubtitles(

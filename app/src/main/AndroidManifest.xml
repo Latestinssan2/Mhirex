@@ -43,6 +43,8 @@
         It is now used for exactly two things:
           1. Credential Manager's Google account chooser, which is a system UI handoff.
           2. Downloading the profile photo from lh3.googleusercontent.com, cached locally.
+          3. Human-initiated Pixabay image/video searches. Search terms and the Pixabay API key are
+             sent to Pixabay; media projects and face frames remain on-device.
 
         Video, audio and image processing are still entirely on-device via ffmpeg-kit; no project
         media is ever sent over the network. The About screen's privacy claim should be read as

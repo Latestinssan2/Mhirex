@@ -242,7 +242,14 @@ class TextOverlayView @JvmOverloads constructor(
                 
                 paint.letterSpacing = op.letterSpacing
 
-                val lines = op.text.split("\n")
+                val visibleText = if (op.animationPreset == "Typewriter") {
+                    val points = op.text.codePoints().toArray()
+                    val duration = ((op.endTimeMs ?: start + 900L) - start).coerceAtLeast(500L)
+                    val count = ((relativeTimeMs.toFloat() / duration).coerceIn(0f, 1f) * points.size).toInt().coerceAtMost(points.size)
+                    if (count == 0) continue
+                    String(points, 0, count)
+                } else op.text
+                val lines = visibleText.split("\n")
                 val textHeight = (paint.descent() - paint.ascent()) + op.lineSpacing * scale
                 val totalHeight = lines.size * textHeight
                 
@@ -322,6 +329,17 @@ class TextOverlayView @JvmOverloads constructor(
                     }
                 }
 
+                val animatedScale = if (op.scaleKeyframes.isNotEmpty()) {
+                    interpolateKeyframes(op.scaleKeyframes, relativeTimeMs, 1f).coerceAtLeast(0.05f)
+                } else 1f
+                canvas.save()
+                canvas.scale(animatedScale, animatedScale, startX + maxTextWidth / 2f, startY)
+                if (op.animationPreset == "Blur") {
+                    paint.setShadowLayer(7f * scale, 0f, 0f, baseColorInt)
+                } else {
+                    paint.clearShadowLayer()
+                }
+
                 // Draw each line
                 for ((index, line) in lines.withIndex()) {
                     val lineW = paint.measureText(line)
@@ -348,6 +366,8 @@ class TextOverlayView @JvmOverloads constructor(
                     
                     canvas.drawText(line, lineX, lineY, paint)
                 }
+                canvas.restore()
+                paint.clearShadowLayer()
             }
         }
 

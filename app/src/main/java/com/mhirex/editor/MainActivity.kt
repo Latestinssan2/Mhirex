@@ -798,15 +798,12 @@ class MainActivity : AppCompatActivity() {
             .setInterpolator(android.view.animation.OvershootInterpolator(1.4f))
             .start()
 
-        val orbOne = view.findViewById<View>(R.id.onboardingOrbOne)
         val orbTwo = view.findViewById<View>(R.id.onboardingOrbTwo)
         val onboardingDrift = listOf(
-            ObjectAnimator.ofFloat(orbOne, View.TRANSLATION_X, 0f, 22f),
-            ObjectAnimator.ofFloat(orbOne, View.TRANSLATION_Y, 0f, 16f),
             ObjectAnimator.ofFloat(orbTwo, View.TRANSLATION_X, 0f, -20f),
             ObjectAnimator.ofFloat(orbTwo, View.TRANSLATION_Y, 0f, 22f)
         ).onEachIndexed { index, animator ->
-            animator.duration = if (index < 2) 3200 else 3800
+            animator.duration = 3800
             animator.repeatCount = ValueAnimator.INFINITE
             animator.repeatMode = ValueAnimator.REVERSE
         }

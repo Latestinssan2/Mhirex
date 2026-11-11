@@ -108,6 +108,10 @@ Everything in this list ships today.
 - **Canvas Background** - Add a blurred background or a solid color for a cohesive look when your video aspect ratio does not match the project frame.
 - **Reverse** - Reverse video playback.
 - **Timeline Organization** - Enhanced editing with snapping functionality, overlay duplication, freeze frame actions, and improved UI visual styling.
+- **Editable templates** - Freeze + monochrome, Noir montage with automatic varied transitions, a birthday title with a locally synthesized melody, and a split-at-playhead slow-motion preset.
+- **Tracked face effects** - On-device face-landmark tracking can attach the bundled goggles or skull mask artwork to one face in a selected video clip.
+- **Pixabay Explore** - Search Pixabay images and videos, see creator names, then review rights before adding a video. Music and sound-effect search opens Pixabay's own library.
+- **Motion scrub and haptics** - Optional gyroscope-driven timeline scrubbing, with native haptic ticks controlled by the app's haptics setting.
 - **Project Save & Import** - Save non-destructive project state as a `.lcprj` file to save and reopen editable project files anytime.
 - **Freehand Drawing** - Draw directly on top of video clips with custom brush color and stroke controls.
 - **Custom Fonts** - Import `.ttf` or `.otf` font files to customize text overlay typography.
@@ -123,12 +127,25 @@ are documented in [`PLAN.md`](PLAN.md); the work queue is tracked in [`TODO.md`]
 - **Multi-track timeline** - A real project model (video, audio, and overlay tracks) replacing the single flat video track, with continuous zoom, multi-select, and frame-accurate snapping.
 - **Instant preview** - GPU-composited preview that no longer spawns an FFmpeg process, so scrubbing and previewing stay interactive on mid-range hardware.
 - **Beat detection and Sync to Beat** - On-device tempo and beat analysis, beat markers on the timeline, and a one-tap way to cut a montage to the music.
-- **Sound effects** - A built-in, license-clean SFX library that can auto-attach to cuts and stays attached when you move or delete the clip it belongs to.
+- **Expanded sound effects** - A broader license-clean SFX library with beat-aware placement and clip-attached cues.
 - **Effect stacks and meme packs** - Layered, intensity-controlled effects with editable presets (including custom LUTs) instead of single fixed filters.
 - **Text upgrades** - Text animation presets, stroke, shadow, background, scale, and rotation, plus meme-text templates that stay fully editable.
-- **Transitions and templates** - Typed transition groups, automatic (`AUTO`) transition selection, and a photo-slideshow planner with Ken Burns styles.
+- **Transitions and templates** - Typed transition groups and a photo-slideshow planner with Ken Burns styles. Basic editable templates and `AUTO` transitions are now available.
 - **Platform export presets** - One-tap presets for Reels, Shorts, TikTok, and YouTube, with the share pipeline encoding once instead of per-target.
 - **Structured undo** - Per-operation undo/redo for every edit, replacing today's whole-project snapshots.
+
+## 🌐 Connected media and privacy
+
+### Pixabay API setup
+
+For local builds, add `pixabayApiKey=<your key>` to the ignored root `local.properties` file.
+The key is compiled into the app binary and can be extracted; use a restricted key and rotate it
+before sharing a build. Search terms are sent to Pixabay and responses are cached for 24 hours.
+Pixabay's API does not offer audio search, so Music and Sound Effects open Pixabay's library page.
+
+Face-effect frames are analyzed on-device. MediaPipe may send SDK performance and usage metrics;
+the selected video frames are not uploaded. YouTube and Spotify links open their official services;
+Mhirex does not download or extract their audio.
 
 ## 📱 Screenshots
 

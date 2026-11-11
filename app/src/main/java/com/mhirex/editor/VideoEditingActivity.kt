@@ -67,8 +67,11 @@ import com.mhirex.editor.models.EditOperation
 import com.mhirex.editor.models.VideoProject
 import com.mhirex.editor.models.TextPosition
 import com.mhirex.editor.models.id
+import com.mhirex.editor.commands.UpdateOperationCommand
 import kotlinx.coroutines.Job
 import com.mhirex.editor.services.FFmpegRenderEngine
+import com.mhirex.editor.services.FaceEffectTracker
+import com.mhirex.editor.services.PixabayMediaCatalog
 import com.mhirex.editor.services.ProxyResultRecord
 import com.mhirex.editor.services.ProxyResultStore
 import com.mhirex.editor.utils.ErrorCode
@@ -634,6 +637,12 @@ class VideoEditingActivity : AppCompatActivity() {
     private var isRecordingVoiceOver = false
     private var voiceOverFile: File? = null
     private var voiceOverStartTimeMs = 0L
+    private var motionScrubEnabled = false
+    private var motionScrubLastTimestampNs = 0L
+    private var motionScrubLastHapticMs = 0L
+    private var motionSensorManager: android.hardware.SensorManager? = null
+    private var motionSensor: android.hardware.Sensor? = null
+    private var motionSensorListener: android.hardware.SensorEventListener? = null
 
     private val requestRecordAudioPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -1184,6 +1193,9 @@ class VideoEditingActivity : AppCompatActivity() {
                 toolbar.findViewById<View>(R.id.btnTextDuplicate)?.setBounceClickListener {
                     duplicateSelectedOverlay()
                 }
+                toolbar.findViewById<View>(R.id.btnTextAnimate)?.setBounceClickListener {
+                    showTextAnimationPicker()
+                }
 
 
                 val btnKeyboard = toolbar.findViewById<ImageButton>(R.id.btnTextKeyboardTab)
@@ -1497,6 +1509,9 @@ class VideoEditingActivity : AppCompatActivity() {
                 toolbar.findViewById<View>(R.id.btnImageDuplicate)?.setBounceClickListener {
                     duplicateSelectedOverlay()
                 }
+                toolbar.findViewById<View>(R.id.btnImageAnimate)?.setBounceClickListener {
+                    showStickerAnimationPicker()
+                }
                 toolbar.findViewById<View>(R.id.btnImageMask)?.setBounceClickListener {
                     showMaskBottomSheet()
                 }
@@ -1600,6 +1615,9 @@ class VideoEditingActivity : AppCompatActivity() {
 
                 toolbar.findViewById<ImageButton>(R.id.btnVideoFreezeFrame)?.setBounceClickListener {
                     freezeFrameAtCurrentPosition()
+                }
+                toolbar.findViewById<ImageButton>(R.id.btnVideoTemplates)?.setBounceClickListener {
+                    showEditTemplatesDialog()
                 }
                 toolbar.findViewById<ImageButton>(R.id.btnVideoSpeed)?.setBounceClickListener {
                     selectedVideoIndex?.let { index ->
@@ -2274,6 +2292,7 @@ class VideoEditingActivity : AppCompatActivity() {
                     }
 
                     updateUIInteractionState()
+                    maybeAddSavedCreatorWatermark(project)
 
                     textOverlayView?.let { overlay ->
                         val overlayOps = project.operations.filter { it is EditOperation.AddText }
@@ -3631,7 +3650,7 @@ class VideoEditingActivity : AppCompatActivity() {
         }
     }
 
-    private fun freezeFrameAtCurrentPosition() {
+    private fun freezeFrameAtCurrentPosition(onCreated: ((Long) -> Unit)? = null) {
         val index = selectedVideoIndex ?: return
         val sequenceItems = getSequenceItems()
         if (index < 0 || index >= sequenceItems.size) return
@@ -3736,6 +3755,7 @@ class VideoEditingActivity : AppCompatActivity() {
                     viewModel.updateSequenceOrder(newItems.drop(1))
                 }
                 Toast.makeText(this@VideoEditingActivity, R.string.toast_freeze_frame_added_to_sequence, Toast.LENGTH_SHORT).show()
+                onCreated?.invoke(globalPos)
             } else {
                 Toast.makeText(this@VideoEditingActivity, R.string.toast_failed_to_create_freeze_frame, Toast.LENGTH_SHORT).show()
             }
@@ -4457,7 +4477,7 @@ class VideoEditingActivity : AppCompatActivity() {
         
         // Calculate the local split time inside the clip's own timeline
         val localOffset = globalPos - clipStartGlobal
-        val localSplitTimeMs = item.trimStartMs + localOffset
+        val localSplitTimeMs = item.trimStartMs + (localOffset * item.speed).toLong()
         
         viewModel.splitVideoSegment(index, localSplitTimeMs, item.uri, item.durationMs)
         selectedVideoIndex = null
@@ -7272,6 +7292,669 @@ class VideoEditingActivity : AppCompatActivity() {
         bottomSheet.show()
     }
 
+    private fun automaticTransitionFor(index: Int): String {
+        // Stable, varied choices make AUTO predictable across undo/redo and project reopen.
+        val choices = listOf("fade", "dissolve", "slideleft", "zoomin", "wipeleft")
+        return choices[Math.floorMod(index, choices.size)]
+    }
+
+    private fun showEditTemplatesDialog() {
+        val sheet = BottomSheetDialog(this)
+        val view = layoutInflater.inflate(R.layout.dialog_edit_templates, null)
+        sheet.setContentView(view)
+
+        view.findViewById<View>(R.id.btnTemplateFreezeSkull).setBounceClickListener {
+            val selectedIndex = selectedVideoIndex
+            val sequence = getSequenceItems()
+            if (selectedIndex == null || selectedIndex !in sequence.indices) {
+                Toast.makeText(this, "Select a clip and place the playhead first.", Toast.LENGTH_SHORT).show()
+                return@setBounceClickListener
+            }
+            sheet.dismiss()
+            freezeFrameAtCurrentPosition { freezeAtMs ->
+                getSequenceItems().indices.forEach { viewModel.setColorFilter(it, "monochrome") }
+                val duration = getTotalSequenceDuration()
+                val cueStart = freezeAtMs.coerceAtMost(duration)
+                viewModel.addTextOperation(
+                    text = "RIP",
+                    fontSize = 64,
+                    position = "Center Align",
+                    color = "#FFFFFF",
+                    startTimeMs = cueStart,
+                    endTimeMs = (cueStart + 2800L).coerceAtMost(duration)
+                )
+                viewModel.addOperation(
+                    EditOperation.AddImageOverlay(
+                        imageUri = Uri.parse("android.resource://$packageName/${R.drawable.ar_skull_mask}"),
+                        relativeX = 0.5f,
+                        relativeY = 0.42f,
+                        relativeWidth = 0.22f,
+                        relativeHeight = 0.22f,
+                        rotationAngle = 0f,
+                        startTimeMs = cueStart,
+                        endTimeMs = (cueStart + 2800L).coerceAtMost(duration),
+                        fileDurationMs = 2800L,
+                        isLooping = true,
+                    )
+                )
+                viewModel.addBackgroundAudioOperation(
+                    audioUri = Uri.parse("android.resource://$packageName/${R.raw.freeze_stinger}"),
+                    volume = 0.72f,
+                    startTimeMs = cueStart,
+                    endTimeMs = (cueStart + 1800L).coerceAtMost(duration),
+                    originalDurationMs = 1500L,
+                    fadeInDurationMs = 20L,
+                    fadeOutDurationMs = 250L
+                )
+                viewModel.project.value?.let { renderTracks(it) }
+            }
+        }
+
+        view.findViewById<View>(R.id.btnTemplateNoir).setBounceClickListener {
+            sheet.dismiss()
+            val clipCount = getSequenceItems().size
+            if (clipCount == 0) return@setBounceClickListener
+            for (index in 0 until clipCount) viewModel.setColorFilter(index, "monochrome")
+            for (index in 0 until clipCount - 1) viewModel.addTransitionOperation(index, automaticTransitionFor(index), 550L)
+            viewModel.project.value?.let { renderTracks(it) }
+            Toast.makeText(this, "Noir look and automatic transitions added. Edit them from the timeline.", Toast.LENGTH_SHORT).show()
+        }
+
+        view.findViewById<View>(R.id.btnTemplateSlowMoment).setBounceClickListener {
+            val index = selectedVideoIndex
+            if (index == null || index !in getSequenceItems().indices) {
+                Toast.makeText(this, "Select a clip and place the playhead inside it first.", Toast.LENGTH_SHORT).show()
+                return@setBounceClickListener
+            }
+            val globalPosition = getGlobalPosition()
+            val sequence = getSequenceItems()
+            val clipStart = sequence.take(index).sumOf { it.trimmedDurationMs }
+            val clipEnd = clipStart + sequence[index].trimmedDurationMs
+            if (globalPosition <= clipStart || globalPosition >= clipEnd) {
+                Toast.makeText(this, "Place the playhead inside the selected clip to set the slow-motion start.", Toast.LENGTH_SHORT).show()
+                return@setBounceClickListener
+            }
+            sheet.dismiss()
+            splitSelectedVideo()
+            val slowIndex = index + 1
+            val slowedItem = getSequenceItems().getOrNull(slowIndex)
+            if (slowedItem != null) {
+                selectedVideoIndex = slowIndex
+                applySpeedToSegment(0.5f)
+            }
+        }
+
+        view.findViewById<View>(R.id.btnTemplateBirthday).setBounceClickListener {
+            sheet.dismiss()
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Birthday song rights")
+                .setMessage("This template uses a new Mhirex synthesized recording of the familiar birthday melody. The recording is new, but composition rights can vary by country. Mhirex cannot grant song clearance; confirm local rights before sharing.")
+                .setPositiveButton("Add birthday template") { _, _ -> applyBirthdayTemplate() }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        view.findViewById<View>(R.id.btnSongLinkInfo).setBounceClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Use music you have rights to")
+                .setMessage("Paste a Spotify or YouTube link to open it in its official app, then import a licensed audio file with Add Audio. Mhirex cannot extract or download MP3s from those services, and a link cannot prove or grant video-use rights. A credit line does not replace a licence.")
+                .setPositiveButton("Open song link") { _, _ -> showSongLinkDialog() }
+                .setNeutralButton("Add licensed audio") { _, _ -> audioAction() }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        view.findViewById<View>(R.id.btnPixabayExplore).setBounceClickListener {
+            sheet.dismiss()
+            showPixabayExploreDialog()
+        }
+
+        val motionButton = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnMotionScrub)
+        fun updateMotionButton() {
+            motionButton.text = if (motionScrubEnabled) "Disable gyro motion scrub" else "Enable gyro motion scrub"
+        }
+        updateMotionButton()
+        motionButton.setBounceClickListener {
+            if (motionScrubEnabled) {
+                setMotionScrubEnabled(false)
+            } else {
+                val manager = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
+                if (manager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE) == null) {
+                    Toast.makeText(this, "This device has no gyroscope sensor.", Toast.LENGTH_SHORT).show()
+                } else {
+                    setMotionScrubEnabled(true)
+                    sheet.dismiss()
+                    Toast.makeText(this, "Tilt gently to scrub. Tap Templates to turn it off.", Toast.LENGTH_LONG).show()
+                }
+            }
+            updateMotionButton()
+        }
+        view.findViewById<View>(R.id.btnArFaces).setBounceClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("Tracked face effect")
+                .setMessage("Mhirex samples the selected clip on this device and tracks one face. Face frames are not uploaded; MediaPipe may send SDK performance and usage metrics.")
+                .setItems(arrayOf("Cyber goggles", "Skull mask")) { _, which ->
+                    val accessory = if (which == 0) FaceEffectTracker.Accessory.GOGGLES else FaceEffectTracker.Accessory.SKULL_MASK
+                    sheet.dismiss()
+                    applyTrackedFaceEffect(accessory)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+        view.findViewById<View>(R.id.btnCreatorWatermark).setBounceClickListener {
+            sheet.dismiss()
+            showCreatorWatermarkDialog()
+        }
+        sheet.show()
+    }
+
+    private fun showCreatorWatermarkDialog() {
+        val prefs = getSharedPreferences(Branding.PREFS_NAME, Context.MODE_PRIVATE)
+        val savedName = prefs.getString("creator_watermark_name", "").orEmpty()
+        val savedPlatform = prefs.getString("creator_watermark_platform", "youtube").orEmpty()
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(28, 8, 28, 4)
+        }
+        val handleInput = TextInputEditText(this).apply {
+            hint = "Your channel name or @username"
+            setSingleLine(true)
+            setText(savedName)
+        }
+        content.addView(handleInput)
+        val platforms = com.google.android.material.chip.ChipGroup(this).apply {
+            isSingleSelection = true
+            isSelectionRequired = true
+        }
+        val youtubeChip = com.google.android.material.chip.Chip(this).apply {
+            text = "YouTube"; isCheckable = true; id = View.generateViewId()
+        }
+        val instagramChip = com.google.android.material.chip.Chip(this).apply {
+            text = "Instagram"; isCheckable = true; id = View.generateViewId()
+        }
+        platforms.addView(youtubeChip)
+        platforms.addView(instagramChip)
+        platforms.check(if (savedPlatform == "instagram") instagramChip.id else youtubeChip.id)
+        content.addView(platforms)
+        val saveSwitch = com.google.android.material.materialswitch.MaterialSwitch(this).apply {
+            text = "Automatically add to future videos"
+            isChecked = prefs.getBoolean("creator_watermark_enabled", false)
+        }
+        content.addView(saveSwitch)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Creator watermark")
+            .setMessage("Add a small social badge and your channel name. Turn on automatic mode to save these settings for future projects; leave it off for this video only.")
+            .setView(content)
+            .setPositiveButton("Add watermark", null)
+            .setNegativeButton("Cancel", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val handle = handleInput.text?.toString()?.trim()?.removePrefix("@")?.take(32).orEmpty()
+                        if (handle.isBlank() || !handle.matches(Regex("[A-Za-z0-9._-]+"))) {
+                            handleInput.error = "Use letters, numbers, dots, underscores or hyphens."
+                            return@setOnClickListener
+                        }
+                        val platform = if (platforms.checkedChipId == instagramChip.id) "instagram" else "youtube"
+                        if (saveSwitch.isChecked) {
+                            prefs.edit()
+                                .putBoolean("creator_watermark_enabled", true)
+                                .putString("creator_watermark_name", handle)
+                                .putString("creator_watermark_platform", platform)
+                                .apply()
+                        } else {
+                            prefs.edit().putBoolean("creator_watermark_enabled", false).apply()
+                        }
+                        val project = viewModel.project.value
+                        if (project != null) {
+                            val suffix = if (saveSwitch.isChecked) "default" else System.nanoTime().toString()
+                            addCreatorWatermark(project, handle, platform, suffix)
+                        }
+                        dialog.dismiss()
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private val creatorWatermarksBeingAdded = mutableSetOf<String>()
+
+    private fun maybeAddSavedCreatorWatermark(project: VideoProject) {
+        val prefs = getSharedPreferences(Branding.PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("creator_watermark_enabled", false)) return
+        val name = prefs.getString("creator_watermark_name", "").orEmpty()
+        val platform = prefs.getString("creator_watermark_platform", "youtube").orEmpty()
+        if (name.isBlank() || platform !in setOf("youtube", "instagram")) return
+        val suffix = "default"
+        val logoId = "creator_watermark_${platform}_${name.hashCode()}_$suffix"
+        if (project.operations.filterIsInstance<EditOperation.AddImageOverlay>().any { it.id == logoId } ||
+            !creatorWatermarksBeingAdded.add(logoId)
+        ) return
+        addCreatorWatermark(project, name, platform, suffix)
+    }
+
+    private fun addCreatorWatermark(project: VideoProject, name: String, platform: String, suffix: String) {
+        val operationSuffix = "creator_watermark_${platform}_${name.hashCode()}_$suffix"
+        if (project.operations.any { it.id == operationSuffix }) return
+        creatorWatermarksBeingAdded.add(operationSuffix)
+        lifecycleScope.launch {
+            try {
+                val videoAspect = withContext(Dispatchers.IO) {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this@VideoEditingActivity, project.sourceUri)
+                        val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 9f
+                        val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 16f
+                        width / height
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }.coerceIn(0.45f, 2.4f)
+                val image = if (platform == "instagram") R.drawable.brand_instagram else R.drawable.brand_youtube
+                viewModel.addOperation(
+                    EditOperation.AddImageOverlay(
+                        imageUri = Uri.parse("android.resource://$packageName/$image"),
+                        relativeX = 0.955f,
+                        relativeY = 0.925f,
+                        relativeWidth = 0.052f,
+                        relativeHeight = 0.052f * videoAspect,
+                        rotationAngle = 0f,
+                        id = operationSuffix,
+                        opacity = 0.94f,
+                        isLooping = true,
+                    )
+                )
+                val cleanName = name.filter { it.isLetterOrDigit() || it in "@._- " }.take(32)
+                viewModel.addOperation(
+                    EditOperation.AddText(
+                        text = "@$cleanName",
+                        fontSize = 20,
+                        position = TextPosition.CENTER,
+                        relativeX = 0.80f,
+                        relativeY = 0.925f,
+                        color = "#FFFFFF",
+                        id = "$operationSuffix-text",
+                        opacity = 0.94f,
+                        borderThickness = 2,
+                        borderColor = "#000000",
+                    )
+                )
+                viewModel.project.value?.let { renderTracks(it) }
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not add creator watermark", e)
+                Toast.makeText(this@VideoEditingActivity, "Could not add the creator watermark.", Toast.LENGTH_SHORT).show()
+            } finally {
+                creatorWatermarksBeingAdded.remove(operationSuffix)
+            }
+        }
+    }
+
+    private fun applyTrackedFaceEffect(accessory: FaceEffectTracker.Accessory) {
+        val index = selectedVideoIndex
+        val items = getSequenceItems()
+        val item = index?.let { items.getOrNull(it) }
+        if (index == null || item == null || item.isImage) {
+            Toast.makeText(this, "Select a video clip first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipStartMs = items.take(index).sumOf { it.trimmedDurationMs }
+        showLoading("Tracking face landmarks…", "Frames are analyzed locally on this device")
+        lifecycleScope.launch {
+            try {
+                val track = FaceEffectTracker.track(
+                    this@VideoEditingActivity,
+                    item.uri,
+                    item.trimStartMs,
+                    item.speed,
+                    item.trimmedDurationMs,
+                    accessory,
+                )
+                if (track == null || track.positions.isEmpty()) {
+                    Toast.makeText(this@VideoEditingActivity, "No face was found in the selected clip.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val (videoWidth, videoHeight) = withContext(Dispatchers.IO) {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(this@VideoEditingActivity, item.uri)
+                        val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toFloatOrNull() ?: 1080f
+                        val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toFloatOrNull() ?: 1920f
+                        w to h
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }
+                val resourceId = if (accessory == FaceEffectTracker.Accessory.GOGGLES) R.drawable.ar_goggles else R.drawable.ar_skull_mask
+                val assetAspect = if (accessory == FaceEffectTracker.Accessory.GOGGLES) 600f / 220f else 480f / 500f
+                val widthMultiplier = if (accessory == FaceEffectTracker.Accessory.GOGGLES) 1.52f else 1.16f
+                val relativeWidth = (track.baseWidthFraction * widthMultiplier).coerceIn(0.12f, 0.9f)
+                val relativeHeight = (relativeWidth * (videoWidth / videoHeight) / assetAspect).coerceIn(0.08f, 0.75f)
+                val overlay = EditOperation.AddImageOverlay(
+                    imageUri = Uri.parse("android.resource://$packageName/$resourceId"),
+                    relativeX = track.positions.first().valueX,
+                    relativeY = track.positions.first().valueY,
+                    relativeWidth = relativeWidth,
+                    relativeHeight = relativeHeight,
+                    rotationAngle = track.rotations.firstOrNull()?.valueX ?: 0f,
+                    startTimeMs = clipStartMs,
+                    endTimeMs = clipStartMs + item.trimmedDurationMs,
+                    fileDurationMs = item.trimmedDurationMs,
+                    isLooping = true,
+                    positionKeyframes = track.positions,
+                    scaleKeyframes = track.scales,
+                    rotationKeyframes = track.rotations,
+                )
+                viewModel.addOperation(overlay)
+                viewModel.project.value?.let { renderTracks(it) }
+                Toast.makeText(this@VideoEditingActivity, "Tracked face effect added. Undo removes it.", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e(TAG, "Face tracking failed", e)
+                Toast.makeText(this@VideoEditingActivity, "Face tracking could not finish for this clip.", Toast.LENGTH_SHORT).show()
+            } finally {
+                hideLoading()
+            }
+        }
+    }
+
+    private fun showPixabayExploreDialog() {
+        val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(28, 12, 28, 4) }
+        val query = TextInputEditText(this).apply {
+            hint = "Search images or videos"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        layout.addView(query)
+        val group = com.google.android.material.chip.ChipGroup(this).apply { isSingleSelection = true; isSelectionRequired = true }
+        val imagesChip = com.google.android.material.chip.Chip(this).apply { text = "Images"; isCheckable = true; isChecked = true }
+        val videosChip = com.google.android.material.chip.Chip(this).apply { text = "Videos"; isCheckable = true }
+        val musicChip = com.google.android.material.chip.Chip(this).apply { text = "Music & SFX"; isCheckable = true }
+        group.addView(imagesChip); group.addView(videosChip); group.addView(musicChip)
+        layout.addView(group)
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Explore Pixabay")
+            .setMessage("Search results include creator attribution. Images and videos use the Pixabay API; music and sound effects open Pixabay’s library because its API does not provide audio search.")
+            .setView(layout)
+            .setPositiveButton("Search", null)
+            .setNegativeButton("Cancel", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val q = query.text?.toString()?.trim().orEmpty()
+                        if (musicChip.isChecked) {
+                            val path = if (q.isBlank()) "music/" else "music/search/" + android.net.Uri.encode(q) + "/"
+                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
+                                .setTitle("Review the music licence")
+                                .setMessage("Check the track's Pixabay licence and any usage restrictions before downloading or adding it. Mhirex cannot grant copyright clearance; keep the source page with your project records.")
+                                .setPositiveButton("Open Pixabay Music") { _, _ ->
+                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://pixabay.com/$path"))) }
+                                    dialog.dismiss()
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        } else if (q.isBlank()) {
+                            query.error = "Enter a search term"
+                        } else {
+                            dialog.dismiss()
+                            searchPixabay(q, if (videosChip.isChecked) "videos" else "images")
+                        }
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun searchPixabay(query: String, mediaType: String) {
+        val apiKey = BuildConfig.PIXABAY_API_KEY
+        if (apiKey.isBlank()) {
+            Toast.makeText(this, "Pixabay API key is not configured. Add pixabayApiKey to local.properties.", Toast.LENGTH_LONG).show()
+            return
+        }
+        showLoading("Searching Pixabay…")
+        lifecycleScope.launch {
+            try {
+                val hits = PixabayMediaCatalog.search(this@VideoEditingActivity, apiKey, query, mediaType)
+                if (hits.isEmpty()) {
+                    Toast.makeText(this@VideoEditingActivity, "No Pixabay results found.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val entries = hits.map { "${it.tags}\nBy ${it.creator} · Pixabay" }.toTypedArray()
+                    MaterialAlertDialogBuilder(this@VideoEditingActivity)
+                        .setTitle("Pixabay ${mediaType} · ${hits.size} results")
+                    .setItems(entries) { _, which ->
+                        val hit = hits[which]
+                        if (mediaType == "videos") {
+                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
+                                .setTitle("Check rights before adding")
+                                .setMessage("Before adding this video, review the Pixabay source page and its current licence. Confirm that the licence and any other rights let you use it in this project. Mhirex cannot grant copyright clearance.")
+                                .setPositiveButton("I have the rights — add video") { _, _ -> downloadAndAddPixabayVideo(hit) }
+                                .setNeutralButton("Review source") { _, _ ->
+                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.pageUrl))) }
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        } else {
+                            MaterialAlertDialogBuilder(this@VideoEditingActivity)
+                                .setTitle("Review image licence")
+                                .setMessage("Images are not hotlinked into your project. Review the Pixabay source and licence, download the image if you have rights to use it, then import the local file into Mhirex.")
+                                .setPositiveButton("Open source page") { _, _ ->
+                                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(hit.pageUrl))) }
+                                }
+                                .setNegativeButton("Cancel", null)
+                                .show()
+                        }
+                    }
+                        .setPositiveButton("Search again") { _, _ -> showPixabayExploreDialog() }
+                        .setNegativeButton("Done", null)
+                        .show()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Pixabay search failed", e)
+                Toast.makeText(this@VideoEditingActivity, "Pixabay search failed. Check your connection and API rate limit.", Toast.LENGTH_LONG).show()
+            } finally {
+                hideLoading()
+            }
+        }
+    }
+
+    private fun downloadAndAddPixabayVideo(hit: com.mhirex.editor.services.PixabayMediaHit) {
+        val source = hit.downloadUrl
+        if (source.isNullOrBlank() || hit.id <= 0L || !source.startsWith("https://cdn.pixabay.com/video/")) {
+            Toast.makeText(this, "This Pixabay result has no downloadable video file.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        showLoading("Adding Pixabay video…", "Downloading the selected source to this device")
+        lifecycleScope.launch {
+            var finalFile: File? = null
+            try {
+                finalFile = withContext(Dispatchers.IO) {
+                    val directory = File(filesDir, "pixabay-media").apply { mkdirs() }
+                    val target = File(directory, "pixabay-video-${hit.id}.mp4")
+                    if (target.exists() && target.length() > 0L) return@withContext target
+                    val part = File(directory, "pixabay-video-${hit.id}.part")
+                    val connection = (java.net.URL(source).openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 15_000
+                        readTimeout = 60_000
+                        instanceFollowRedirects = true
+                        setRequestProperty("Accept", "video/mp4,application/octet-stream")
+                    }
+                    try {
+                        if (connection.responseCode !in 200..299) throw IllegalStateException("Download failed")
+                        val length = connection.contentLengthLong
+                        if (length > 350L * 1024L * 1024L) throw IllegalStateException("Video is too large for this download")
+                        connection.inputStream.use { input ->
+                            part.outputStream().buffered().use { output ->
+                                val buffer = ByteArray(128 * 1024)
+                                var total = 0L
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    total += count
+                                    if (total > 350L * 1024L * 1024L) throw IllegalStateException("Video is too large for this download")
+                                    output.write(buffer, 0, count)
+                                }
+                            }
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
+                    if (part.length() <= 0L || !part.renameTo(target)) {
+                        part.delete()
+                        throw IllegalStateException("Video download was incomplete")
+                    }
+                    target
+                }
+                val file = finalFile ?: throw IllegalStateException("Video download failed")
+                val durationMs = withContext(Dispatchers.IO) {
+                    val retriever = MediaMetadataRetriever()
+                    try {
+                        retriever.setDataSource(file.absolutePath)
+                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    } finally {
+                        runCatching { retriever.release() }
+                    }
+                }
+                if (durationMs <= 0L) throw IllegalStateException("Downloaded video could not be read")
+                val oldDuration = getTotalSequenceDuration()
+                val mediaUri = Uri.fromFile(file)
+                viewModel.addMergeOperation(listOf(EditOperation.MergeItem(mediaUri, durationMs)))
+                val creditStart = oldDuration + (durationMs - 3000L).coerceAtLeast(0L)
+                viewModel.addTextOperation(
+                    text = "Pixabay video by ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)} - licence checked by user",
+                    fontSize = 20,
+                    position = "Bottom Center",
+                    color = "#FFFFFF",
+                    startTimeMs = creditStart,
+                    endTimeMs = oldDuration + durationMs
+                )
+                viewModel.addTextOperation(
+                    text = "Source: pixabay.com/videos/id-${hit.id}/",
+                    fontSize = 18,
+                    position = "Top Center",
+                    color = "#FFFFFF",
+                    startTimeMs = creditStart,
+                    endTimeMs = oldDuration + durationMs
+                )
+                viewModel.project.value?.let { renderTracks(it) }
+                Toast.makeText(this@VideoEditingActivity, "Video added with an editable source credit.", Toast.LENGTH_LONG).show()
+            } catch (e: Exception) {
+                Log.w(TAG, "Pixabay video import failed", e)
+                Toast.makeText(this@VideoEditingActivity, e.message ?: "Could not add Pixabay video.", Toast.LENGTH_LONG).show()
+            } finally {
+                hideLoading()
+            }
+        }
+    }
+
+    private fun showSongLinkDialog() {
+        val input = TextInputEditText(this).apply {
+            hint = "https://open.spotify.com/... or https://youtu.be/..."
+            setSingleLine(true)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Open a song link")
+            .setMessage("The link opens in the official service. Import a separate audio file only if you have permission to use it in your video.")
+            .setView(input)
+            .setPositiveButton("Open") { _, _ ->
+                val uri = runCatching { Uri.parse(input.text?.toString()?.trim().orEmpty()) }.getOrNull()
+                val host = uri?.host?.lowercase(Locale.ROOT).orEmpty()
+                if (uri == null || uri.scheme != "https" || !(host == "youtube.com" || host.endsWith(".youtube.com") || host == "youtu.be" || host == "spotify.com" || host.endsWith(".spotify.com"))) {
+                    Toast.makeText(this, "Enter a valid YouTube or Spotify link.", Toast.LENGTH_SHORT).show()
+                } else {
+                    runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+                        .onFailure { Toast.makeText(this, "Could not open the song link.", Toast.LENGTH_SHORT).show() }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun applyBirthdayTemplate() {
+        val duration = getTotalSequenceDuration()
+        if (duration <= 0L) {
+            Toast.makeText(this, "Add a video clip before applying this template.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val creditStart = (duration - 3200L).coerceAtLeast(0L)
+        viewModel.addTextOperation(
+            text = "HAPPY BIRTHDAY!",
+            fontSize = 52,
+            position = "Center Align",
+            color = "#FFFFFF",
+            startTimeMs = 0L,
+            endTimeMs = duration
+        )
+        viewModel.addTextOperation(
+            text = "Music: Mhirex synth rendition. Confirm local song rights before sharing.",
+            fontSize = 20,
+            position = "Bottom Center",
+            color = "#FFFFFF",
+            startTimeMs = creditStart,
+            endTimeMs = duration
+        )
+        viewModel.addBackgroundAudioOperation(
+            audioUri = Uri.parse("android.resource://$packageName/${R.raw.happy_birthday_melody}"),
+            volume = 0.8f,
+            startTimeMs = 0L,
+            endTimeMs = duration,
+            originalDurationMs = 14500L,
+            fadeInDurationMs = 150L,
+            fadeOutDurationMs = 450L
+        )
+        viewModel.addBackgroundAudioOperation(
+            audioUri = Uri.parse("android.resource://$packageName/${R.raw.birthday_chime}"),
+            volume = 0.62f,
+            startTimeMs = 0L,
+            endTimeMs = minOf(duration, 1550L),
+            originalDurationMs = 1550L,
+            fadeInDurationMs = 10L,
+            fadeOutDurationMs = 300L
+        )
+        viewModel.project.value?.let { renderTracks(it) }
+    }
+
+    private fun setMotionScrubEnabled(enabled: Boolean) {
+        val manager = (getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager) ?: return
+        if (!enabled) {
+            motionSensorListener?.let { manager.unregisterListener(it) }
+            motionSensorListener = null
+            motionSensorManager = null
+            motionSensor = null
+            motionScrubEnabled = false
+            motionScrubLastTimestampNs = 0L
+            return
+        }
+        val sensor = manager.getDefaultSensor(android.hardware.Sensor.TYPE_GYROSCOPE) ?: return
+        val listener = object : android.hardware.SensorEventListener {
+            override fun onAccuracyChanged(sensor: android.hardware.Sensor?, accuracy: Int) = Unit
+            override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                if (!motionScrubEnabled) return
+                if (motionScrubLastTimestampNs == 0L) {
+                    motionScrubLastTimestampNs = event.timestamp
+                    return
+                }
+                val elapsedSeconds = ((event.timestamp - motionScrubLastTimestampNs).coerceAtLeast(0L) / 1_000_000_000.0).coerceAtMost(0.1)
+                motionScrubLastTimestampNs = event.timestamp
+                // Integrate yaw rate into a gentle jog, avoiding jumps when the sensor batches events.
+                val deltaMs = (event.values[1] * elapsedSeconds * 1800.0).toLong()
+                if (kotlin.math.abs(deltaMs) < 2L) return
+                val target = (getGlobalPosition() + deltaMs).coerceIn(0L, getTotalSequenceDuration())
+                seekToGlobalPosition(target)
+                if (target / 1000L != motionScrubLastHapticMs / 1000L) {
+                    findViewById<View>(R.id.customVideoSeeker)?.performAppHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                    motionScrubLastHapticMs = target
+                }
+            }
+        }
+        motionScrubEnabled = manager.registerListener(listener, sensor, android.hardware.SensorManager.SENSOR_DELAY_GAME)
+        if (motionScrubEnabled) {
+            motionScrubLastTimestampNs = 0L
+            motionSensorManager = manager
+            motionSensor = sensor
+            motionSensorListener = listener
+        } else {
+            Toast.makeText(this, "Could not start gyro motion scrub.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showTransitionDialog(transitionIndex: Int) {
         val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_transitions, null)
@@ -7286,15 +7969,16 @@ class VideoEditingActivity : AppCompatActivity() {
         fun applyTransitionToIndex(idx: Int, transType: String, durationMs: Long = activeDurationMs) {
             val proj = viewModel.project.value ?: return
             val existing = proj.operations.filterIsInstance<com.mhirex.editor.models.EditOperation.Transition>().find { it.index == idx }
-            if (transType == "none") {
+            val resolvedType = if (transType == "auto") automaticTransitionFor(idx) else transType
+            if (resolvedType == "none") {
                 if (existing != null) {
                     viewModel.removeOperation(existing.id)
                 }
             } else {
                 if (existing != null) {
-                    viewModel.updateOperation(existing.copy(type = transType, durationMs = durationMs))
+                    viewModel.updateOperation(existing.copy(type = resolvedType, durationMs = durationMs))
                 } else {
-                    viewModel.addTransitionOperation(idx, transType, durationMs)
+                    viewModel.addTransitionOperation(idx, resolvedType, durationMs)
                 }
             }
         }
@@ -7315,6 +7999,7 @@ class VideoEditingActivity : AppCompatActivity() {
         }
 
         val transitions = listOf(
+            Pair("auto", "Auto"),
             Pair("none", "None"),
             Pair("fade", "Fade"),
             Pair("fadeblack", "Fade Black"),
@@ -8039,6 +8724,7 @@ class VideoEditingActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        if (motionScrubEnabled) setMotionScrubEnabled(false)
         if (::player.isInitialized) {
             player.pause()
         }
@@ -8569,6 +9255,59 @@ class VideoEditingActivity : AppCompatActivity() {
         }
         
         findViewById<android.widget.HorizontalScrollView>(R.id.editingControlsScroll)?.visibility = View.VISIBLE
+    }
+
+    private fun showTextAnimationPicker() {
+        val operationId = viewModel.selectedOperationId.value ?: return
+        val project = viewModel.project.value ?: return
+        val textOp = project.operations.firstOrNull { it.id == operationId } as? EditOperation.AddText ?: return
+        val presets = arrayOf("None", "Typewriter", "Bounce", "Blur reveal", "3D extrude")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Text animation")
+            .setItems(presets) { _, index ->
+                val duration = ((textOp.endTimeMs ?: (textOp.startTimeMs ?: 0L) + 900L) - (textOp.startTimeMs ?: 0L)).coerceAtLeast(500L)
+                val baseScale = EditOperation.KeyframePoint(0L, 0.55f)
+                val midScale = EditOperation.KeyframePoint((duration * 0.58f).toLong(), 1.14f)
+                val settleScale = EditOperation.KeyframePoint((duration * 0.78f).toLong(), 0.94f)
+                val finalScale = EditOperation.KeyframePoint(duration, 1f)
+                val fade = listOf(EditOperation.KeyframePoint(0L, 0f), EditOperation.KeyframePoint((duration * 0.32f).toLong(), 1f))
+                val preset = when (index) { 1 -> "Typewriter"; 2 -> "Bounce"; 3 -> "Blur"; 4 -> "3D Extrude"; else -> "None" }
+                viewModel.executeCommand(UpdateOperationCommand(operationId, "Apply $preset text animation") { operation ->
+                    val op = operation as? EditOperation.AddText ?: return@UpdateOperationCommand operation
+                    when (preset) {
+                        "Bounce" -> op.copy(animationPreset = preset, scaleKeyframes = listOf(baseScale, midScale, settleScale, finalScale), opacityKeyframes = fade)
+                        "Blur" -> op.copy(animationPreset = preset, scaleKeyframes = listOf(EditOperation.KeyframePoint(0L, 0.82f), EditOperation.KeyframePoint(duration, 1f)), opacityKeyframes = fade, borderThickness = maxOf(op.borderThickness, 2), borderColor = op.color)
+                        "3D Extrude" -> op.copy(animationPreset = preset, borderThickness = maxOf(op.borderThickness, 3), borderColor = "#101020")
+                        else -> op.copy(animationPreset = preset, scaleKeyframes = emptyList(), opacityKeyframes = emptyList(), borderThickness = if (preset == "None") 0 else op.borderThickness)
+                    }
+                })
+            }
+            .show()
+    }
+
+    private fun showStickerAnimationPicker() {
+        val operationId = viewModel.selectedOperationId.value ?: return
+        val project = viewModel.project.value ?: return
+        val imageOp = project.operations.firstOrNull { it.id == operationId } as? EditOperation.AddImageOverlay ?: return
+        val presets = arrayOf("None", "Bounce", "Pop", "Spin in", "Fade in")
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Sticker animation")
+            .setItems(presets) { _, index ->
+                val duration = ((imageOp.endTimeMs ?: (imageOp.startTimeMs ?: 0L) + 900L) - (imageOp.startTimeMs ?: 0L)).coerceAtLeast(500L)
+                val preset = presets[index]
+                val scales = when (preset) {
+                    "Bounce" -> listOf(EditOperation.KeyframePoint(0L, 0.45f), EditOperation.KeyframePoint((duration * 0.58f).toLong(), 1.16f), EditOperation.KeyframePoint((duration * 0.78f).toLong(), 0.94f), EditOperation.KeyframePoint(duration, 1f))
+                    "Pop" -> listOf(EditOperation.KeyframePoint(0L, 0.15f), EditOperation.KeyframePoint((duration * 0.45f).toLong(), 1.08f), EditOperation.KeyframePoint(duration, 1f))
+                    else -> emptyList()
+                }
+                val opacity = if (preset == "Fade in" || preset == "Bounce" || preset == "Pop" || preset == "Spin in") listOf(EditOperation.KeyframePoint(0L, 0f), EditOperation.KeyframePoint((duration * 0.35f).toLong(), 1f)) else emptyList()
+                val rotation = if (preset == "Spin in") listOf(EditOperation.KeyframePoint(0L, -130f), EditOperation.KeyframePoint(duration, 0f)) else emptyList()
+                viewModel.executeCommand(UpdateOperationCommand(operationId, "Apply $preset sticker animation") { operation ->
+                    val op = operation as? EditOperation.AddImageOverlay ?: return@UpdateOperationCommand operation
+                    op.copy(animationPreset = preset, scaleKeyframes = scales, opacityKeyframes = opacity, rotationKeyframes = rotation)
+                })
+            }
+            .show()
     }
 
     private fun enterKeyframeEditingMode(isText: Boolean) {

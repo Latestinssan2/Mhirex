@@ -19,16 +19,6 @@
             android:layout_height="wrap_content">
 
             <View
-                android:id="@+id/onboardingOrbOne"
-                android:layout_width="220dp"
-                android:layout_height="220dp"
-                android:layout_gravity="top|end"
-                android:layout_marginTop="-85dp"
-                android:layout_marginEnd="-75dp"
-                android:background="@drawable/bg_about_orb_pink"
-                android:importantForAccessibility="no" />
-
-            <View
                 android:id="@+id/onboardingOrbTwo"
                 android:layout_width="260dp"
                 android:layout_height="260dp"
