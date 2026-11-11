@@ -113,6 +113,139 @@
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Half speed segment" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateBirthdayCardBlue"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Birthday blue frame preview" android:background="#30333D" android:src="@drawable/template_frame_birthday_blue" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Birthday blue frame" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Confetti + photo window" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateBirthdayFrameFloral"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Floral birthday preview" android:background="#30333D" android:src="@drawable/template_frame_birthday_floral" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Floral birthday" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Blue flowers + frame" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateBirthdayFrameGarden"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Garden birthday preview" android:background="#30333D" android:src="@drawable/template_frame_birthday_garden" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Garden birthday" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Flowers + photo window" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateCongratsRedFrame"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Congrats red frame preview" android:background="#30333D" android:src="@drawable/template_frame_congrats_red" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Congrats red frame" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Gold photo frame" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateCongratsPinkCard"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Pink congratulations preview" android:background="#30333D" android:src="@drawable/template_frame_congrats_pink" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Pink congratulations" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Pink greeting overlay" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateGoldConfetti"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Gold confetti preview" android:background="#30333D" android:src="@drawable/template_frame_gold_confetti" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Gold confetti" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Sparkle text overlay" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/btnTemplateFlowerCongrats"
+                android:layout_width="148dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackground"
+                app:cardBackgroundColor="#171922"
+                app:cardCornerRadius="16dp"
+                app:strokeColor="#66F5A8D0"
+                app:strokeWidth="1dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp">
+                    <ImageView android:layout_width="match_parent" android:layout_height="142dp" android:contentDescription="Flower congratulations preview" android:background="#30333D" android:src="@drawable/template_frame_congrats_flower" android:scaleType="fitCenter" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="9dp" android:text="Flower congratulations" android:textColor="@color/textColor" android:textSize="14sp" android:fontFamily="sans-serif-medium" />
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="3dp" android:text="Floral greeting card" android:textColor="@color/toolTextInactive" android:textSize="11sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
     </HorizontalScrollView>
 </LinearLayout>

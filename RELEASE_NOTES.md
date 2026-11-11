@@ -1,3 +1,16 @@
+# Mhirex 1.0-beta14
+
+## What's new
+
+- Use the supplied YouTube mark for the editor's watermark toolbar button.
+- Add birthday and congratulations frame templates from the supplied images; transparent photo windows reveal the video beneath, and choosing a template adds its image overlay to the timeline.
+
+## Build
+
+- Android version: `1.0-beta14` (version code `18`).
+
+---
+
 # Mhirex 1.0-beta13
 
 ## What's new

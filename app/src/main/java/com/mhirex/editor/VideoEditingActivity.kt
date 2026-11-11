@@ -7417,7 +7417,62 @@ class VideoEditingActivity : AppCompatActivity() {
             sheet.dismiss()
             applyBirthdayTemplate()
         }
+        listOf(
+            R.id.btnTemplateBirthdayCardBlue to (R.drawable.template_frame_birthday_blue to "Birthday blue frame"),
+            R.id.btnTemplateBirthdayFrameFloral to (R.drawable.template_frame_birthday_floral to "Floral birthday frame"),
+            R.id.btnTemplateBirthdayFrameGarden to (R.drawable.template_frame_birthday_garden to "Garden birthday frame"),
+            R.id.btnTemplateCongratsRedFrame to (R.drawable.template_frame_congrats_red to "Red congratulations frame"),
+            R.id.btnTemplateCongratsPinkCard to (R.drawable.template_frame_congrats_pink to "Pink congratulations card"),
+            R.id.btnTemplateGoldConfetti to (R.drawable.template_frame_gold_confetti to "Gold confetti overlay"),
+            R.id.btnTemplateFlowerCongrats to (R.drawable.template_frame_congrats_flower to "Floral congratulations card"),
+        ).forEach { (buttonId, template) ->
+            view.findViewById<View>(buttonId).setBounceClickListener {
+                sheet.dismiss()
+                applyImageFrameTemplate(template.first, template.second)
+            }
+        }
         sheet.show()
+    }
+
+    private fun applyImageFrameTemplate(imageResource: Int, templateName: String) {
+        val project = viewModel.project.value ?: return
+        val duration = getTotalSequenceDuration()
+        if (duration <= 0L) {
+            Toast.makeText(this, "Add a video clip before applying this frame.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val drawable = resources.getDrawable(imageResource, theme)
+        val imageAspect = drawable.intrinsicWidth.toFloat() / drawable.intrinsicHeight.coerceAtLeast(1)
+        val canvasAspect = project.operations.filterIsInstance<EditOperation.Crop>().lastOrNull()?.let { crop ->
+            when (crop.aspectRatio) {
+                "16:9" -> 16f / 9f
+                "9:16" -> 9f / 16f
+                "1:1" -> 1f
+                else -> if (crop.customWidth > 0 && crop.customHeight > 0) crop.customWidth.toFloat() / crop.customHeight else null
+            }
+        } ?: 9f / 16f
+        val maxSide = 0.96f
+        val (overlayWidth, overlayHeight) = if (imageAspect > canvasAspect) {
+            maxSide to (maxSide * canvasAspect / imageAspect)
+        } else {
+            (maxSide * imageAspect / canvasAspect) to maxSide
+        }
+        viewModel.addOperation(
+            EditOperation.AddImageOverlay(
+                imageUri = Uri.parse("android.resource://$packageName/$imageResource"),
+                relativeX = 0.5f,
+                relativeY = 0.5f,
+                relativeWidth = overlayWidth,
+                relativeHeight = overlayHeight,
+                rotationAngle = 0f,
+                startTimeMs = 0L,
+                endTimeMs = duration,
+                fileDurationMs = duration,
+                id = "template_frame_${templateName.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]+"), "_")}_${System.nanoTime()}"
+            )
+        )
+        viewModel.project.value?.let { renderTracks(it) }
+        Toast.makeText(this, "$templateName added as a timeline overlay.", Toast.LENGTH_SHORT).show()
     }
 
     private fun showCreatorWatermarkDialog() {
@@ -7870,24 +7925,48 @@ class VideoEditingActivity : AppCompatActivity() {
 
     private fun downloadAndAddPixabayImage(hit: com.mhirex.editor.services.PixabayMediaHit) {
         val source = hit.downloadUrl
-        if (source.isNullOrBlank() || hit.id <= 0L || !source.startsWith("https://pixabay.com/get/")) {
+        // Pixabay's API can return either its legacy /get/ image URL or a direct
+        // CDN URL (cdn.pixabay.com). The preview path already uses the CDN, so
+        // accept both official HTTPS image hosts when adding a result.
+        val parsedSource = source?.let { runCatching { java.net.URL(it) }.getOrNull() }
+        val isPixabayImageUrl = parsedSource != null && parsedSource.protocol == "https" &&
+            (parsedSource.host.equals("pixabay.com", ignoreCase = true) && parsedSource.path.startsWith("/get/") ||
+                parsedSource.host.equals("cdn.pixabay.com", ignoreCase = true))
+        if (!isPixabayImageUrl || hit.id <= 0L) {
             Toast.makeText(this, "This Pixabay result has no downloadable image.", Toast.LENGTH_SHORT).show()
             return
         }
+        val imageUrl = parsedSource?.toExternalForm() ?: return
         showLoading("Adding Pixabay image…", "Downloading the selected image to this device")
         lifecycleScope.launch {
             try {
                 val file = withContext(Dispatchers.IO) {
                     val directory = File(filesDir, "pixabay-media").apply { mkdirs() }
                     val target = File(directory, "pixabay-image-${hit.id}.jpg")
-                    if (target.exists() && target.length() > 0L) return@withContext target
-                    val connection = (java.net.URL(source).openConnection() as java.net.HttpURLConnection).apply {
+                    if (target.exists()) {
+                        val cachedBounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeFile(target.absolutePath, cachedBounds)
+                        if (target.length() > 0L && cachedBounds.outWidth > 0 && cachedBounds.outHeight > 0) {
+                            return@withContext target
+                        }
+                        target.delete()
+                    }
+                    val part = File(directory, "pixabay-image-${hit.id}.part")
+                    val connection = (java.net.URL(imageUrl).openConnection() as java.net.HttpURLConnection).apply {
                         connectTimeout = 15_000; readTimeout = 30_000; instanceFollowRedirects = true
+                        setRequestProperty("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+                        setRequestProperty("User-Agent", "Mhirex/1.0 (Android)")
+                        setRequestProperty("Referer", "https://pixabay.com/")
                     }
                     try {
-                        if (connection.responseCode !in 200..299) throw IllegalStateException("Image download failed")
+                        val status = connection.responseCode
+                        if (status !in 200..299) throw IllegalStateException("Image download failed (HTTP $status)")
+                        val contentType = connection.contentType.orEmpty().substringBefore(';').trim().lowercase(Locale.ROOT)
+                        if (contentType == "text/html" || contentType == "application/json") {
+                            throw IllegalStateException("Pixabay returned a non-image file")
+                        }
                         if (connection.contentLengthLong > 40L * 1024L * 1024L) throw IllegalStateException("Image is too large")
-                        connection.inputStream.use { input -> target.outputStream().buffered().use { output ->
+                        connection.inputStream.use { input -> part.outputStream().buffered().use { output ->
                             val buffer = ByteArray(64 * 1024); var total = 0L
                             while (true) {
                                 val count = input.read(buffer); if (count < 0) break; total += count
@@ -7895,8 +7974,24 @@ class VideoEditingActivity : AppCompatActivity() {
                                 output.write(buffer, 0, count)
                             }
                         } }
+                    } catch (error: Exception) {
+                        part.delete()
+                        throw error
                     } finally { connection.disconnect() }
-                    if (target.length() <= 0L) throw IllegalStateException("Image download was incomplete")
+                    if (part.length() <= 0L) {
+                        part.delete()
+                        throw IllegalStateException("Image download was incomplete")
+                    }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(part.absolutePath, bounds)
+                    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                        part.delete()
+                        throw IllegalStateException("Pixabay returned an unreadable image")
+                    }
+                    if (!part.renameTo(target)) {
+                        part.delete()
+                        throw IllegalStateException("Could not save the downloaded image")
+                    }
                     target
                 }
                 val duration = getTotalSequenceDuration().coerceAtLeast(1000L)
