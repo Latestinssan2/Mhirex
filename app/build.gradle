@@ -37,8 +37,8 @@ android {
         targetSdk 34
         // Per-ABI version codes are base + 0/1/2 (armeabi-v7a/arm64-v8a/x86_64), so the base has to
         // advance by MORE than the largest offset for every ABI to be offered the upgrade.
-        // v1.0-beta11 shipped base 15, i.e. per-ABI 15/16/17. Base 16 gives 16/17/18 so Android
-        // accepts this as an upgrade for every ABI variant.
+        // v1.0-beta11 shipped base 15, i.e. per-ABI 15/16/17. Base 17 gives 17/18/19 so Android
+        // accepts this as an upgrade for every ABI variant and leaves room after beta12 base 16.
         versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 17
         versionName "1.0-beta13"
 
