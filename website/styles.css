@@ -729,26 +729,35 @@ main {
 
 .badge-top-left {
   top: 12%;
-  left: -80px;
+  left: -300px;
   animation-delay: 0s;
 }
 
 .badge-top-right {
   top: 25%;
-  right: -80px;
+  right: -300px;
   animation-delay: 1.2s;
 }
 
 .badge-bottom-left {
   bottom: 28%;
-  left: -90px;
+  left: -300px;
   animation-delay: 2.1s;
 }
 
 .badge-bottom-right {
   bottom: 12%;
-  right: -70px;
+  right: -300px;
   animation-delay: 0.7s;
+}
+
+/* Keep the floating badges outside the phone. At common laptop, tablet, and
+   phone widths, there is not enough side room for them, so hide them instead
+   of letting them cover the screenshot or one another. */
+@media (max-width: 1440px) {
+  .floating-badge {
+    display: none;
+  }
 }
 
 @keyframes floatBadge {

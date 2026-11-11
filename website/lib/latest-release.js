@@ -9,10 +9,9 @@
  * another, and nothing would look broken. So the rule lives here once and both
  * import it.
  *
- * The rule: the newest non-draft release that actually ships an APK.
- * Pre-releases are included on purpose, because every Mhirex release is a
- * pre-release and GitHub's /releases/latest ignores those entirely. Verified
- * against the live repo, not assumed.
+ * The rule: the newest non-draft release that actually ships an APK. This
+ * includes beta and stable releases, ordered by publication time, so the
+ * landing page and download endpoint stay aligned as the project releases.
  *
  * "Newest" is decided by timestamp, NOT by position in the response. GitHub's
  * GET /releases is documented only as returning releases "in reverse order of
@@ -27,7 +26,7 @@
  * rather than once per phone.
  */
 
-export const REPO = "Preet3627/Mhirex";
+export const REPO = "Latestinssan2/Mhirex";
 const API = `https://api.github.com/repos/${REPO}/releases`;
 
 /** All APK assets on a release, or an empty array. */
@@ -82,7 +81,7 @@ export function pickArm64Asset(release) {
   return apks.find((a) => a.name.includes("arm64")) || apks[0];
 }
 
-/** Human-facing size label, matching the "~51.7 MB" format already in use. */
+/** Human-facing arm64 APK size, shown in a compact MB format. */
 export function sizeLabelMb(asset) {
   if (!asset || !asset.size) return null;
   return Number((asset.size / (1024 * 1024)).toFixed(1));
