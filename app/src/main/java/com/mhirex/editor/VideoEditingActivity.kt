@@ -5978,15 +5978,81 @@ class VideoEditingActivity : AppCompatActivity() {
                 ))
                 baseMatrix.postConcat(warmthMatrix)
             }
+            if (adjust.shadow != 0 || adjust.highlights != 0) {
+                // ColorMatrix cannot reproduce a full tone curve, but this preview lift makes
+                // shadow/highlight changes visible while the export uses the full FFmpeg curve.
+                val tonalScale = (1f + (adjust.highlights - adjust.shadow) / 100f * 0.12f)
+                    .coerceIn(0.75f, 1.25f)
+                val tonalOffset = (adjust.shadow * 0.22f + adjust.highlights * 0.12f) * 2.55f
+                val tonalMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                    tonalScale, 0f, 0f, 0f, tonalOffset,
+                    0f, tonalScale, 0f, 0f, tonalOffset,
+                    0f, 0f, tonalScale, 0f, tonalOffset,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                baseMatrix.postConcat(tonalMatrix)
+            }
+            if (adjust.sharpen != 0) {
+                val scale = 1f + kotlin.math.abs(adjust.sharpen) / 100f * 0.12f
+                val offset = 127.5f * (1f - scale)
+                baseMatrix.postConcat(android.graphics.ColorMatrix(floatArrayOf(
+                    scale, 0f, 0f, 0f, offset,
+                    0f, scale, 0f, 0f, offset,
+                    0f, 0f, scale, 0f, offset,
+                    0f, 0f, 0f, 1f, 0f
+                )))
+            }
+            if (adjust.vignette != 0) {
+                val dim = kotlin.math.abs(adjust.vignette) / 100f * 18f
+                val vignettePreviewMatrix = android.graphics.ColorMatrix(floatArrayOf(
+                    1f, 0f, 0f, 0f, -dim,
+                    0f, 1f, 0f, 0f, -dim,
+                    0f, 0f, 1f, 0f, -dim,
+                    0f, 0f, 0f, 1f, 0f
+                ))
+                baseMatrix.postConcat(vignettePreviewMatrix)
+            }
         }
 
         val hasAdjustments = (adjust != null && !adjust.isDefault())
         if (filterMatrix != null || hasAdjustments) {
             val paint = android.graphics.Paint()
             paint.colorFilter = android.graphics.ColorMatrixColorFilter(baseMatrix)
-            playerView.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
+            // The player is a TextureView and still-image sequence items use a sibling
+            // ImageView. Filtering only StyledPlayerView misses the photo path and can be
+            // bypassed by TextureView's separate surface. Apply the clip grade to their common
+            // masked parent so both preview types receive the same treatment.
+            mainVideoMaskContainer?.setLayerType(View.LAYER_TYPE_HARDWARE, paint)
         } else {
-            playerView.setLayerType(View.LAYER_TYPE_NONE, null)
+            mainVideoMaskContainer?.setLayerType(View.LAYER_TYPE_NONE, null)
+        }
+        playerView.setLayerType(View.LAYER_TYPE_NONE, null)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val blur = kotlin.math.abs(adjust?.blur ?: 0)
+            val motion = kotlin.math.abs(adjust?.motionBlur ?: 0)
+            val horizontalBlur = maxOf(blur, motion) / 18f
+            val verticalBlur = blur / 18f
+            mainVideoMaskContainer?.setRenderEffect(
+                if (horizontalBlur > 0f || verticalBlur > 0f) {
+                    android.graphics.RenderEffect.createBlurEffect(
+                        horizontalBlur.coerceAtLeast(0.01f),
+                        verticalBlur.coerceAtLeast(0.01f),
+                        android.graphics.Shader.TileMode.CLAMP
+                    )
+                } else null
+            )
+        }
+    }
+
+    private fun movePreviewToClipIfNeeded(clipIndex: Int) {
+        val sequenceItems = getSequenceItems()
+        if (clipIndex !in sequenceItems.indices) return
+        val clipStartMs = sequenceItems.take(clipIndex).sumOf { it.trimmedDurationMs }
+        val clipEndMs = clipStartMs + sequenceItems[clipIndex].trimmedDurationMs
+        val playheadMs = getGlobalPosition()
+        if (playheadMs < clipStartMs || playheadMs >= clipEndMs) {
+            seekToGlobalPosition(clipStartMs, force = true)
+            playerView.post { syncUiWithPlayer() }
         }
     }
 
@@ -6018,11 +6084,14 @@ class VideoEditingActivity : AppCompatActivity() {
             for ((index, item) in sequenceItems.withIndex()) {
                 val start = accumulatedStartMs
                 val end = accumulatedStartMs + item.trimmedDurationMs
-                if (currentGlobalPos >= start && currentGlobalPos <= end) {
+                if (currentGlobalPos >= start && currentGlobalPos < end) {
                     activeClipIndex = index
                     break
                 }
                 accumulatedStartMs += item.trimmedDurationMs
+            }
+            if (sequenceItems.isNotEmpty() && currentGlobalPos >= totalDuration) {
+                activeClipIndex = sequenceItems.lastIndex
             }
             val operations = viewModel.project.value?.operations.orEmpty()
             val timelineFilter = operations.filterIsInstance<EditOperation.TimelineFilter>()
@@ -6144,7 +6213,9 @@ class VideoEditingActivity : AppCompatActivity() {
 
         var remainingPos = globalPos
         var index = 0
-        while (index < chunkDurationsMs.size && remainingPos > chunkDurationsMs[index]) {
+        // Use half-open chunk ranges so an exact boundary seeks into the next clip instead
+        // of asking ExoPlayer to render the previous clip at its end timestamp.
+        while (index < chunkDurationsMs.lastIndex && remainingPos >= chunkDurationsMs[index]) {
             remainingPos -= chunkDurationsMs[index]
             index++
         }
@@ -7450,6 +7521,7 @@ class VideoEditingActivity : AppCompatActivity() {
     }
 
     private fun showColorFilterSelectionDialog(clipIndex: Int) {
+        movePreviewToClipIfNeeded(clipIndex)
         val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_color_filters, null)
         bottomSheet.setContentView(view)
@@ -8380,7 +8452,16 @@ class VideoEditingActivity : AppCompatActivity() {
                     val retriever = MediaMetadataRetriever()
                     try {
                         retriever.setDataSource(file.absolutePath)
-                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                        val decodedFrame = retriever.getFrameAtTime(
+                            (minOf(duration, 500L).coerceAtLeast(0L)) * 1000L,
+                            MediaMetadataRetriever.OPTION_CLOSEST
+                        )
+                        if (decodedFrame == null) {
+                            throw IllegalStateException("Downloaded video has no decodable preview frame")
+                        }
+                        decodedFrame.recycle()
+                        duration
                     } finally {
                         runCatching { retriever.release() }
                     }
@@ -8388,7 +8469,7 @@ class VideoEditingActivity : AppCompatActivity() {
                 if (durationMs <= 0L) throw IllegalStateException("Downloaded video could not be read")
                 val oldDuration = getTotalSequenceDuration()
                 val mediaUri = Uri.fromFile(file)
-                viewModel.addMergeOperation(listOf(EditOperation.MergeItem(mediaUri, durationMs)))
+                viewModel.addMergeOperation(listOf(EditOperation.MergeItem(uri = mediaUri, durationMs = durationMs, isImage = false)))
                 val creditStart = oldDuration + (durationMs - 3000L).coerceAtLeast(0L)
                 viewModel.addTextOperation(
                     text = "Pixabay video by ${hit.creator.replace(Regex("[^A-Za-z0-9 ._-]"), "").take(36)}",
@@ -8406,7 +8487,11 @@ class VideoEditingActivity : AppCompatActivity() {
                     startTimeMs = creditStart,
                     endTimeMs = oldDuration + durationMs
                 )
+                val sequenceItems = getSequenceItems()
+                selectedVideoIndex = sequenceItems.lastIndex
                 viewModel.project.value?.let { renderTracks(it) }
+                seekToGlobalPosition(oldDuration, force = true)
+                syncUiWithPlayer()
                 Toast.makeText(this@VideoEditingActivity, "Video added with an editable source credit.", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Log.w(TAG, "Pixabay video import failed", e)
@@ -9684,6 +9769,7 @@ class VideoEditingActivity : AppCompatActivity() {
     }
 
     private fun showAdjustSelectionDialog(clipIndex: Int) {
+        movePreviewToClipIfNeeded(clipIndex)
         val bottomSheet = com.google.android.material.bottomsheet.BottomSheetDialog(this)
         val view = layoutInflater.inflate(R.layout.dialog_adjustments, null)
         bottomSheet.setContentView(view)

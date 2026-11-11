@@ -646,30 +646,6 @@
                 android:paddingVertical="8dp"
                 android:paddingHorizontal="8dp">
 
-                <LinearLayout
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:gravity="center">
-                    <ImageButton
-                        android:id="@+id/btnPixabayLibrary"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="@drawable/tool_button_inactive"
-                        android:src="@drawable/ic_public_24"
-                        android:padding="8dp"
-                        android:scaleType="fitCenter"
-                        android:contentDescription="Browse Pixabay media"
-                        app:tint="@color/toolTextInactive" />
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="4dp"
-                        android:text="Pixabay"
-                        android:textSize="11sp"
-                        android:fontFamily="sans-serif-medium"
-                        android:textColor="@color/toolTextInactive" />
-                </LinearLayout>
 
                 <LinearLayout
                     android:layout_width="60dp"
@@ -706,7 +682,7 @@
                         android:layout_width="40dp"
                         android:layout_height="40dp"
                         android:background="@drawable/tool_button_inactive"
-                        android:src="@drawable/brand_youtube_watermark"
+                        android:src="@drawable/ic_youtube_black"
                         android:padding="8dp"
                         android:scaleType="fitCenter"
                         android:contentDescription="Add creator watermark" />
@@ -964,6 +940,30 @@
                         android:textColor="@color/toolTextInactive"/>
                 </LinearLayout>
 
+                <LinearLayout
+                    android:layout_width="60dp"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center">
+                    <ImageButton
+                        android:id="@+id/btnPixabayLibrary"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/tool_button_inactive"
+                        android:src="@drawable/ic_public_24"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:contentDescription="Browse Pixabay media"
+                        app:tint="@color/toolTextInactive" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="Pixabay"
+                        android:textSize="11sp"
+                        android:fontFamily="sans-serif-medium"
+                        android:textColor="@color/toolTextInactive" />
+                </LinearLayout>
             </LinearLayout>
         </HorizontalScrollView>
     </LinearLayout>
